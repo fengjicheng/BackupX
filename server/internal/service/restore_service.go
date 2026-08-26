@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,7 +40,7 @@ type RestoreService struct {
 	eventDispatcher EventDispatcher
 	tempDir         string
 	semaphore       chan struct{}
-	async           func(func())
+	async           func(func(context.Context)) bool
 	now             func() time.Time
 	metrics         *metrics.Metrics
 }
@@ -47,6 +48,13 @@ type RestoreService struct {
 // SetMetrics 注入 Prometheus 采集器。
 func (s *RestoreService) SetMetrics(m *metrics.Metrics) {
 	s.metrics = m
+}
+
+// SetBackgroundRunner binds local restore work to the application lifecycle.
+func (s *RestoreService) SetBackgroundRunner(runner BackgroundRunner) {
+	if runner != nil {
+		s.async = runner.Go
+	}
 }
 
 // NewRestoreService 构造恢复服务。maxConcurrent 控制本地并发恢复数。
@@ -83,7 +91,7 @@ func NewRestoreService(
 		dispatcher:      dispatcher,
 		tempDir:         tempDir,
 		semaphore:       make(chan struct{}, maxConcurrent),
-		async:           func(job func()) { go job() },
+		async:           runDetached,
 		now:             func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -187,12 +195,18 @@ func (s *RestoreService) StartSelective(ctx context.Context, backupRecordID uint
 	// 远程节点路由
 	if remoteNode := s.resolveRemoteNode(ctx, restoreNodeID); remoteNode != nil {
 		if s.dispatcher == nil {
+			message := "Agent 下发通道未就绪"
+			if finalizeErr := s.finalize(ctx, restore.ID, model.RestoreRecordStatusFailed, message); finalizeErr != nil {
+				return nil, apperror.Internal("RESTORE_FINALIZE_FAILED", "无法写回恢复失败状态", finalizeErr)
+			}
 			return nil, apperror.Internal("RESTORE_DISPATCH_UNAVAILABLE", "Agent 下发通道未就绪", nil)
 		}
 		// 节点离线 → 立即标记 failed，避免记录永远卡在 running
 		if remoteNode.Status != model.NodeStatusOnline {
 			offlineMsg := fmt.Sprintf("节点 %s 当前离线，无法执行恢复", remoteNode.Name)
-			_ = s.finalize(ctx, restore.ID, model.RestoreRecordStatusFailed, offlineMsg)
+			if finalizeErr := s.finalize(ctx, restore.ID, model.RestoreRecordStatusFailed, offlineMsg); finalizeErr != nil {
+				return nil, apperror.Internal("RESTORE_FINALIZE_FAILED", "无法写回恢复失败状态", finalizeErr)
+			}
 			s.logHub.Append(restore.ID, "error", offlineMsg)
 			s.logHub.Complete(restore.ID, model.RestoreRecordStatusFailed)
 			return nil, apperror.BadRequest("NODE_OFFLINE", offlineMsg, nil)
@@ -200,8 +214,10 @@ func (s *RestoreService) StartSelective(ctx context.Context, backupRecordID uint
 		if _, dispatchErr := s.dispatcher.EnqueueCommand(ctx, restoreNodeID, model.AgentCommandTypeRestoreRecord, map[string]any{
 			"restoreRecordId": restore.ID,
 		}); dispatchErr != nil {
-			_ = s.finalize(ctx, restore.ID, model.RestoreRecordStatusFailed,
-				"下发恢复任务到远程节点失败: "+dispatchErr.Error())
+			if finalizeErr := s.finalize(ctx, restore.ID, model.RestoreRecordStatusFailed,
+				"下发恢复任务到远程节点失败: "+dispatchErr.Error()); finalizeErr != nil {
+				dispatchErr = errors.Join(dispatchErr, finalizeErr)
+			}
 			return nil, apperror.Internal("AGENT_COMMAND_ENQUEUE_FAILED", "无法下发恢复任务到远程节点", dispatchErr)
 		}
 		s.logHub.Append(restore.ID, "info", fmt.Sprintf("已下发恢复任务到节点 %s（#%d），等待 Agent 执行", remoteNode.Name, restoreNodeID))
@@ -209,10 +225,16 @@ func (s *RestoreService) StartSelective(ctx context.Context, backupRecordID uint
 	}
 
 	// 本地节点：异步执行
-	run := func() {
-		s.executeLocally(context.Background(), restore.ID, task, record, selectedPaths, targetPath)
+	run := func(runCtx context.Context) {
+		s.executeLocally(runCtx, restore.ID, task, record, selectedPaths, targetPath)
 	}
-	s.async(run)
+	if !s.async(run) {
+		message := "服务正在关闭，恢复任务未启动"
+		if finalizeErr := s.finalize(ctx, restore.ID, model.RestoreRecordStatusFailed, message); finalizeErr != nil {
+			return nil, apperror.Internal("RESTORE_FINALIZE_FAILED", "无法写回恢复失败状态", finalizeErr)
+		}
+		return nil, backgroundTaskUnavailable("RESTORE_SERVICE_SHUTTING_DOWN")
+	}
 	return s.getDetail(ctx, restore.ID)
 }
 
@@ -238,21 +260,29 @@ func (s *RestoreService) resolveRemoteNode(ctx context.Context, nodeID uint) *mo
 
 // executeLocally 在 Master 本地执行恢复。
 func (s *RestoreService) executeLocally(ctx context.Context, restoreID uint, task *model.BackupTask, backupRecord *model.BackupRecord, selectedPaths []string, targetPath string) {
-	s.semaphore <- struct{}{}
-	defer func() { <-s.semaphore }()
-
 	logger := backup.NewExecutionLogger(restoreID, s.logHub)
 	status := model.RestoreRecordStatusFailed
 	errMessage := ""
 
 	defer func() {
-		finalizeErr := s.finalizeWithLog(ctx, restoreID, status, errMessage, logger.String())
+		persistCtx, cancel := finalizationContext(ctx)
+		defer cancel()
+		finalizeErr := s.finalizeWithLog(persistCtx, restoreID, status, errMessage, logger.String())
 		if finalizeErr != nil {
 			logger.Errorf("写回恢复记录失败：%v", finalizeErr)
 		}
 		s.logHub.Complete(restoreID, status)
-		s.dispatchRestoreEvent(ctx, restoreID, status, errMessage, task)
+		if dispatchErr := s.dispatchRestoreEvent(persistCtx, restoreID, status, errMessage, task); dispatchErr != nil {
+			logger.Warnf("派发恢复结果事件失败：%v", dispatchErr)
+		}
 	}()
+
+	if !acquireBackgroundSlot(ctx, s.semaphore) {
+		errMessage = ctx.Err().Error()
+		logger.Warnf("等待恢复执行槽时任务被取消：%v", ctx.Err())
+		return
+	}
+	defer func() { <-s.semaphore }()
 
 	logger.Infof("开始在本地执行恢复（备份记录 #%d）", backupRecord.ID)
 
@@ -387,9 +417,9 @@ func backupKindLabel(kind string) string {
 
 // dispatchRestoreEvent 按终态向事件总线派发 restore_success 或 restore_failed。
 // eventDispatcher 未注入时静默忽略，保持向后兼容。
-func (s *RestoreService) dispatchRestoreEvent(ctx context.Context, restoreID uint, status, errMessage string, task *model.BackupTask) {
+func (s *RestoreService) dispatchRestoreEvent(ctx context.Context, restoreID uint, status, errMessage string, task *model.BackupTask) error {
 	if s.eventDispatcher == nil {
-		return
+		return nil
 	}
 	var eventType, title string
 	switch status {
@@ -400,7 +430,7 @@ func (s *RestoreService) dispatchRestoreEvent(ctx context.Context, restoreID uin
 		eventType = model.NotificationEventRestoreFailed
 		title = "BackupX 恢复失败"
 	default:
-		return
+		return nil
 	}
 	taskName := "未知任务"
 	if task != nil {
@@ -419,7 +449,7 @@ func (s *RestoreService) dispatchRestoreEvent(ctx context.Context, restoreID uin
 	if task != nil {
 		fields["taskId"] = task.ID
 	}
-	_ = s.eventDispatcher.DispatchEvent(ctx, eventType, title, body, fields)
+	return s.eventDispatcher.DispatchEvent(ctx, eventType, title, body, fields)
 }
 
 // resolveProvider 解密存储目标配置并创建 provider（共享实现）。

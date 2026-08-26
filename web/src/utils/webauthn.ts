@@ -1,7 +1,15 @@
-import type { WebAuthnAssertion, WebAuthnAttestation, WebAuthnLoginOptions, WebAuthnRegistrationOptions } from '../services/auth'
+import type {
+  WebAuthnAssertion,
+  WebAuthnAttestation,
+  WebAuthnLoginOptions,
+  WebAuthnRegistrationOptions,
+} from '../services/auth'
 
 function base64UrlToBuffer(value: string) {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=')
+  const padded = value
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(value.length / 4) * 4, '=')
   const binary = atob(padded)
   const bytes = new Uint8Array(binary.length)
   for (let index = 0; index < binary.length; index += 1) {
@@ -25,9 +33,11 @@ function assertWebAuthnAvailable() {
   }
 }
 
-export async function createWebAuthnCredential(options: WebAuthnRegistrationOptions): Promise<WebAuthnAttestation> {
+export async function createWebAuthnCredential(
+  options: WebAuthnRegistrationOptions,
+): Promise<WebAuthnAttestation> {
   assertWebAuthnAvailable()
-  const credential = await navigator.credentials.create({
+  const credential = (await navigator.credentials.create({
     publicKey: {
       ...options,
       challenge: base64UrlToBuffer(options.challenge),
@@ -40,7 +50,7 @@ export async function createWebAuthnCredential(options: WebAuthnRegistrationOpti
         id: base64UrlToBuffer(item.id),
       })),
     },
-  }) as PublicKeyCredential | null
+  })) as PublicKeyCredential | null
   if (!credential) {
     throw new Error('通行密钥创建已取消')
   }
@@ -56,9 +66,11 @@ export async function createWebAuthnCredential(options: WebAuthnRegistrationOpti
   }
 }
 
-export async function getWebAuthnAssertion(options: WebAuthnLoginOptions): Promise<WebAuthnAssertion> {
+export async function getWebAuthnAssertion(
+  options: WebAuthnLoginOptions,
+): Promise<WebAuthnAssertion> {
   assertWebAuthnAvailable()
-  const credential = await navigator.credentials.get({
+  const credential = (await navigator.credentials.get({
     publicKey: {
       challenge: base64UrlToBuffer(options.challenge),
       rpId: options.rpId,
@@ -69,7 +81,7 @@ export async function getWebAuthnAssertion(options: WebAuthnLoginOptions): Promi
         id: base64UrlToBuffer(item.id),
       })),
     },
-  }) as PublicKeyCredential | null
+  })) as PublicKeyCredential | null
   if (!credential) {
     throw new Error('通行密钥验证已取消')
   }

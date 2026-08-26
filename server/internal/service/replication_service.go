@@ -15,6 +15,7 @@ import (
 	"backupx/server/internal/repository"
 	"backupx/server/internal/storage"
 	"backupx/server/internal/storage/codec"
+	"go.uber.org/zap"
 )
 
 // ReplicationService 实现备份复制（3-2-1 规则核心）。
@@ -36,14 +37,28 @@ type ReplicationService struct {
 	eventDispatcher EventDispatcher
 	tempDir         string
 	semaphore       chan struct{}
-	async           func(func())
+	async           func(func(context.Context)) bool
 	now             func() time.Time
 	metrics         *metrics.Metrics
+	logger          *zap.Logger
 }
 
 // SetMetrics 注入 Prometheus 采集器。
 func (s *ReplicationService) SetMetrics(m *metrics.Metrics) {
 	s.metrics = m
+}
+
+func (s *ReplicationService) SetLogger(logger *zap.Logger) {
+	if logger != nil {
+		s.logger = logger
+	}
+}
+
+// SetBackgroundRunner binds replication work to the application lifecycle.
+func (s *ReplicationService) SetBackgroundRunner(runner BackgroundRunner) {
+	if runner != nil {
+		s.async = runner.Go
+	}
 }
 
 func NewReplicationService(
@@ -71,8 +86,9 @@ func NewReplicationService(
 		cipher:          cipher,
 		tempDir:         tempDir,
 		semaphore:       make(chan struct{}, maxConcurrent),
-		async:           func(job func()) { go job() },
+		async:           runDetached,
 		now:             func() time.Time { return time.Now().UTC() },
+		logger:          zap.NewNop(),
 	}
 }
 
@@ -123,13 +139,16 @@ func (s *ReplicationService) TriggerAutoReplication(ctx context.Context, task *m
 	}
 	// 跨节点 local_disk 场景保护：Master 无法访问远程节点本地文件
 	if err := s.validateClusterAccessible(ctx, record); err != nil {
+		s.logger.Warn("automatic replication skipped: source is not accessible", zap.Uint("backup_record_id", record.ID), zap.Error(err))
 		return
 	}
 	for _, destID := range destIDs {
 		if destID == record.StorageTargetID {
 			continue // 源与目标相同，跳过
 		}
-		_, _ = s.Start(ctx, record.ID, destID, "system")
+		if _, err := s.Start(ctx, record.ID, destID, "system"); err != nil {
+			s.logger.Warn("automatic replication start failed", zap.Uint("backup_record_id", record.ID), zap.Uint("dest_target_id", destID), zap.Error(err))
+		}
 	}
 }
 
@@ -172,20 +191,24 @@ func (s *ReplicationService) Start(ctx context.Context, backupRecordID, destTarg
 	if err := s.replications.Create(ctx, rep); err != nil {
 		return nil, apperror.Internal("REPLICATION_CREATE_FAILED", "无法创建复制记录", err)
 	}
-	s.async(func() {
-		s.executeReplication(context.Background(), rep.ID)
-	})
+	repForRun := *rep
+	if !s.async(func(runCtx context.Context) {
+		s.executeReplication(runCtx, &repForRun)
+	}) {
+		message := "服务正在关闭，复制任务未启动"
+		if finalizeErr := s.finalizeReplication(ctx, rep, model.ReplicationStatusFailed, message, 0); finalizeErr != nil {
+			return nil, apperror.Internal("REPLICATION_FINALIZE_FAILED", "无法写回复制失败状态", finalizeErr)
+		}
+		return nil, backgroundTaskUnavailable("REPLICATION_SERVICE_SHUTTING_DOWN")
+	}
 	summary := s.toSummary(rep, "", dest.Name)
 	return &summary, nil
 }
 
 // executeReplication 实际执行：下载源对象到本地临时文件 → 上传到目标存储。
-func (s *ReplicationService) executeReplication(ctx context.Context, repID uint) {
-	s.semaphore <- struct{}{}
-	defer func() { <-s.semaphore }()
-
-	rep, err := s.replications.FindByID(ctx, repID)
-	if err != nil || rep == nil {
+func (s *ReplicationService) executeReplication(ctx context.Context, rep *model.ReplicationRecord) {
+	if rep == nil {
+		s.logger.Error("replication record is nil")
 		return
 	}
 	status := model.ReplicationStatusFailed
@@ -193,18 +216,24 @@ func (s *ReplicationService) executeReplication(ctx context.Context, repID uint)
 	fileSize := int64(0)
 
 	defer func() {
-		completedAt := s.now()
-		rep.Status = status
-		rep.FileSize = fileSize
-		rep.ErrorMessage = strings.TrimSpace(errMessage)
-		rep.DurationSeconds = int(completedAt.Sub(rep.StartedAt).Seconds())
-		rep.CompletedAt = &completedAt
-		_ = s.replications.Update(ctx, rep)
+		persistCtx, cancel := finalizationContext(ctx)
+		defer cancel()
+		if finalizeErr := s.finalizeReplication(persistCtx, rep, status, errMessage, fileSize); finalizeErr != nil {
+			s.logger.Error("finalize replication record failed", zap.Uint("replication_id", rep.ID), zap.Error(finalizeErr))
+		}
 		s.metrics.ObserveReplication(status)
 		if status == model.ReplicationStatusFailed {
-			s.dispatchFailed(ctx, rep, errMessage)
+			if dispatchErr := s.dispatchFailed(persistCtx, rep, errMessage); dispatchErr != nil {
+				s.logger.Warn("dispatch replication failure event failed", zap.Uint("replication_id", rep.ID), zap.Error(dispatchErr))
+			}
 		}
 	}()
+
+	if !acquireBackgroundSlot(ctx, s.semaphore) {
+		errMessage = ctx.Err().Error()
+		return
+	}
+	defer func() { <-s.semaphore }()
 
 	sourceProvider, err := s.resolveProvider(ctx, rep.SourceTargetID)
 	if err != nil {
@@ -271,9 +300,19 @@ func (s *ReplicationService) validateClusterAccessible(ctx context.Context, reco
 		"REPLICATION_CROSS_NODE_LOCAL_DISK", "复制。请改用云存储作为主备份")
 }
 
-func (s *ReplicationService) dispatchFailed(ctx context.Context, rep *model.ReplicationRecord, message string) {
+func (s *ReplicationService) finalizeReplication(ctx context.Context, rep *model.ReplicationRecord, status, message string, fileSize int64) error {
+	completedAt := s.now()
+	rep.Status = status
+	rep.FileSize = fileSize
+	rep.ErrorMessage = strings.TrimSpace(message)
+	rep.DurationSeconds = int(completedAt.Sub(rep.StartedAt).Seconds())
+	rep.CompletedAt = &completedAt
+	return s.replications.Update(ctx, rep)
+}
+
+func (s *ReplicationService) dispatchFailed(ctx context.Context, rep *model.ReplicationRecord, message string) error {
 	if s.eventDispatcher == nil || rep == nil {
-		return
+		return nil
 	}
 	title := "BackupX 备份复制失败"
 	body := fmt.Sprintf("备份记录：#%d\n源 → 目标：#%d → #%d\n错误：%s", rep.BackupRecordID, rep.SourceTargetID, rep.DestTargetID, message)
@@ -285,7 +324,7 @@ func (s *ReplicationService) dispatchFailed(ctx context.Context, rep *model.Repl
 		"destTargetId":   rep.DestTargetID,
 		"error":          message,
 	}
-	_ = s.eventDispatcher.DispatchEvent(ctx, model.NotificationEventReplicationFailed, title, body, fields)
+	return s.eventDispatcher.DispatchEvent(ctx, model.NotificationEventReplicationFailed, title, body, fields)
 }
 
 // List / Get / toSummary

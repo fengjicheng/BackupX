@@ -1,13 +1,33 @@
-import { Alert, Button, Descriptions, Drawer, Message, Space, Spin, Tag, Typography } from '@arco-design/web-react'
+import {
+  Alert,
+  Button,
+  Descriptions,
+  Drawer,
+  Message,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from '@arco-design/web-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deleteBackupRecord, downloadBackupRecord, getBackupRecord, streamBackupRecordLogs } from '../../services/backup-records'
+import {
+  deleteBackupRecord,
+  downloadBackupRecord,
+  getBackupRecord,
+  streamBackupRecordLogs,
+} from '../../services/backup-records'
 import { getBackupTask } from '../../services/backup-tasks'
 import { startRestoreFromBackup } from '../../services/restore-records'
 import { startVerifyByRecord } from '../../services/verification-records'
 import { useAuthStore } from '../../stores/auth'
 import { canWrite } from '../../utils/permissions'
-import type { BackupLogEvent, BackupRecordDetail, BackupRecordStatus, StorageUploadResultItem } from '../../types/backup-records'
+import type {
+  BackupLogEvent,
+  BackupRecordDetail,
+  BackupRecordStatus,
+  StorageUploadResultItem,
+} from '../../types/backup-records'
 import type { BackupTaskDetail } from '../../types/backup-tasks'
 import { resolveErrorMessage } from '../../utils/error'
 import { formatBytes, formatDateTime, formatDuration } from '../../utils/format'
@@ -39,7 +59,12 @@ function buildLogText(record: BackupRecordDetail | null, events: BackupLogEvent[
   return record?.logContent ?? ''
 }
 
-export function BackupRecordLogDrawer({ visible, recordId, onCancel, onChanged }: BackupRecordLogDrawerProps) {
+export function BackupRecordLogDrawer({
+  visible,
+  recordId,
+  onCancel,
+  onChanged,
+}: BackupRecordLogDrawerProps) {
   const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.user)
   const writable = canWrite(currentUser)
@@ -90,7 +115,9 @@ export function BackupRecordLogDrawer({ visible, recordId, onCancel, onChanged }
                 return [...current, event]
               })
               if (event.completed) {
-                setRecord((current) => (current ? { ...current, status: event.status as BackupRecordStatus } : current))
+                setRecord((current) =>
+                  current ? { ...current, status: event.status as BackupRecordStatus } : current,
+                )
               }
             },
             onDone: () => {
@@ -218,7 +245,11 @@ export function BackupRecordLogDrawer({ visible, recordId, onCancel, onChanged }
     if (!recordId || paths.length === 0) {
       return
     }
-    if (!window.confirm(`确定将选中的 ${paths.length} 项恢复到原位置吗？这会覆盖目标位置的现有文件，不可撤销。`)) {
+    if (
+      !window.confirm(
+        `确定将选中的 ${paths.length} 项恢复到原位置吗？这会覆盖目标位置的现有文件，不可撤销。`,
+      )
+    ) {
       return
     }
     try {
@@ -268,10 +299,20 @@ export function BackupRecordLogDrawer({ visible, recordId, onCancel, onChanged }
             <Space>
               {record.status && (
                 <Tag color={getStatusColor(record.status)} bordered>
-                  {record.status === 'success' ? '成功' : record.status === 'failed' ? '失败' : record.status === 'running' ? '执行中' : record.status}
+                  {record.status === 'success'
+                    ? '成功'
+                    : record.status === 'failed'
+                      ? '失败'
+                      : record.status === 'running'
+                        ? '执行中'
+                        : record.status}
                 </Tag>
               )}
-              {record.storageTargetName && <Tag color="arcoblue" bordered>{record.storageTargetName}</Tag>}
+              {record.storageTargetName && (
+                <Tag color="arcoblue" bordered>
+                  {record.storageTargetName}
+                </Tag>
+              )}
             </Space>
           </div>
           <Descriptions
@@ -280,10 +321,17 @@ export function BackupRecordLogDrawer({ visible, recordId, onCancel, onChanged }
               { label: '文件名', value: record.fileName || '-' },
               { label: '文件大小', value: formatBytes(record.fileSize) },
               { label: '存储路径', value: record.storagePath || '-' },
-              ...(record.storageTransferMode ? [{
-                label: '传输路径',
-                value: record.storageTransferMode === 'master_relay' ? 'Master 流式中转' : 'Agent 直传',
-              }] : []),
+              ...(record.storageTransferMode
+                ? [
+                    {
+                      label: '传输路径',
+                      value:
+                        record.storageTransferMode === 'master_relay'
+                          ? 'Master 流式中转'
+                          : 'Agent 直传',
+                    },
+                  ]
+                : []),
               { label: '开始时间', value: formatDateTime(record.startedAt) },
               { label: '完成时间', value: formatDateTime(record.completedAt) },
               { label: '耗时', value: formatDuration(record.durationSeconds) },
@@ -320,20 +368,23 @@ export function BackupRecordLogDrawer({ visible, recordId, onCancel, onChanged }
               </Button>
             )}
           </Space>
-          {record.storageUploadResults && (record.storageUploadResults.length > 1 || record.storageUploadResults.some((result) => result.transferMode)) && (
-            <div>
-              <Typography.Title heading={6}>存储目标上传结果</Typography.Title>
-              <Descriptions
-                column={1}
-                data={record.storageUploadResults.map((r: StorageUploadResultItem) => ({
-                  label: r.storageTargetName,
-                  value: r.status === 'success'
-                    ? `上传成功${r.transferMode === 'master_relay' ? ' · Master 流式中转' : r.transferMode === 'direct' ? ' · Agent 直传' : ''}`
-                    : `上传失败: ${r.error || '未知错误'}`,
-                }))}
-              />
-            </div>
-          )}
+          {record.storageUploadResults &&
+            (record.storageUploadResults.length > 1 ||
+              record.storageUploadResults.some((result) => result.transferMode)) && (
+              <div>
+                <Typography.Title heading={6}>存储目标上传结果</Typography.Title>
+                <Descriptions
+                  column={1}
+                  data={record.storageUploadResults.map((r: StorageUploadResultItem) => ({
+                    label: r.storageTargetName,
+                    value:
+                      r.status === 'success'
+                        ? `上传成功${r.transferMode === 'master_relay' ? ' · Master 流式中转' : r.transferMode === 'direct' ? ' · Agent 直传' : ''}`
+                        : `上传失败: ${r.error || '未知错误'}`,
+                  }))}
+                />
+              </div>
+            )}
 
           <div>
             <Typography.Title heading={6}>执行日志</Typography.Title>
@@ -357,7 +408,11 @@ export function BackupRecordLogDrawer({ visible, recordId, onCancel, onChanged }
         visible={contentsVisible}
         recordId={recordId}
         onClose={() => setContentsVisible(false)}
-        onRestoreSelected={writable && record?.status === 'success' ? (paths) => void handleSelectiveRestore(paths) : undefined}
+        onRestoreSelected={
+          writable && record?.status === 'success'
+            ? (paths) => void handleSelectiveRestore(paths)
+            : undefined
+        }
       />
     </Drawer>
   )

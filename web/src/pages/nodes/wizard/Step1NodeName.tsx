@@ -15,7 +15,12 @@ interface Props {
 }
 
 export function Step1NodeName({
-  mode, onModeChange, singleName, onSingleNameChange, batchText, onBatchTextChange,
+  mode,
+  onModeChange,
+  singleName,
+  onSingleNameChange,
+  batchText,
+  onBatchTextChange,
 }: Props) {
   return (
     <div>
@@ -42,7 +47,9 @@ export function Step1NodeName({
         </div>
       ) : (
         <div>
-          <Text style={{ marginBottom: 6, display: 'block' }}>节点名称（每行一个，最多 50 个）</Text>
+          <Text style={{ marginBottom: 6, display: 'block' }}>
+            节点名称（每行一个，最多 50 个）
+          </Text>
           <TextArea
             rows={8}
             placeholder={'prod-db-01\nprod-db-02\nprod-web-01'}

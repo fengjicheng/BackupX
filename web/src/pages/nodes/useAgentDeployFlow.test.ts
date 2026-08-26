@@ -60,7 +60,10 @@ describe('createAgentDeployFlow', () => {
         if (nodeId === 2) {
           throw new Error('token service unavailable')
         }
-        return tokenResult({ installToken: `tok-${nodeId}`, url: `https://master.example.com/api/install/tok-${nodeId}` })
+        return tokenResult({
+          installToken: `tok-${nodeId}`,
+          url: `https://master.example.com/api/install/tok-${nodeId}`,
+        })
       },
     })
 
@@ -79,10 +82,11 @@ describe('createAgentDeployFlow', () => {
   it('uses restricted-network options in batch install commands', async () => {
     const flow = createAgentDeployFlow({
       batchCreateNodes: async () => [{ id: 1, name: 'restricted' }],
-      createInstallToken: async () => tokenResult({
-        url: 'https://master.internal/api/install/install-token',
-        fallbackUrl: 'https://master.internal/install/install-token',
-      }),
+      createInstallToken: async () =>
+        tokenResult({
+          url: 'https://master.internal/api/install/install-token',
+          fallbackUrl: 'https://master.internal/install/install-token',
+        }),
     })
     const result = await flow.submitNewNodes(['restricted'], {
       ...deployOptions(),
@@ -102,7 +106,8 @@ describe('createAgentDeployFlow', () => {
       createInstallToken: async () => tokenResult(),
     })
 
-    await expect(flow.submitNewNodes(['prod-a', ' prod-a '], deployOptions()))
-      .rejects.toThrow('批次内重复节点名')
+    await expect(flow.submitNewNodes(['prod-a', ' prod-a '], deployOptions())).rejects.toThrow(
+      '批次内重复节点名',
+    )
   })
 })

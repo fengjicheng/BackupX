@@ -45,6 +45,7 @@ func newDashboardNotificationTestDeps(t *testing.T) (*DashboardService, *Notific
 	if err != nil {
 		t.Fatalf("database.Open returned error: %v", err)
 	}
+	closeTestDatabase(t, db)
 	tasks := repository.NewBackupTaskRepository(db)
 	records := repository.NewBackupRecordRepository(db)
 	targets := repository.NewStorageTargetRepository(db)

@@ -1,7 +1,11 @@
 import { Descriptions, Drawer, Space, Tag, Typography } from '@arco-design/web-react'
 import type { BackupTaskDetail } from '../../types/backup-tasks'
 import { formatDateTime } from '../../utils/format'
-import { getBackupTaskStatusColor, getBackupTaskStatusLabel, getBackupTaskTypeLabel } from './field-config'
+import {
+  getBackupTaskStatusColor,
+  getBackupTaskStatusLabel,
+  getBackupTaskTypeLabel,
+} from './field-config'
 
 interface BackupTaskDetailDrawerProps {
   visible: boolean
@@ -19,9 +23,15 @@ export function BackupTaskDetailDrawer({ visible, task, onCancel }: BackupTaskDe
               {task.name}
             </Typography.Title>
             <Space>
-              <Tag color="arcoblue" bordered>{getBackupTaskTypeLabel(task.type)}</Tag>
-              <Tag color={task.enabled ? 'green' : 'gray'} bordered>{task.enabled ? '已启用' : '已停用'}</Tag>
-              <Tag color={getBackupTaskStatusColor(task.lastStatus)} bordered>{getBackupTaskStatusLabel(task.lastStatus)}</Tag>
+              <Tag color="arcoblue" bordered>
+                {getBackupTaskTypeLabel(task.type)}
+              </Tag>
+              <Tag color={task.enabled ? 'green' : 'gray'} bordered>
+                {task.enabled ? '已启用' : '已停用'}
+              </Tag>
+              <Tag color={getBackupTaskStatusColor(task.lastStatus)} bordered>
+                {getBackupTaskStatusLabel(task.lastStatus)}
+              </Tag>
             </Space>
           </div>
           <Descriptions
@@ -29,7 +39,13 @@ export function BackupTaskDetailDrawer({ visible, task, onCancel }: BackupTaskDe
             border
             data={[
               { label: 'Cron', value: task.cronExpr || '仅手动执行' },
-              { label: '存储目标', value: task.storageTargetNames?.length > 0 ? task.storageTargetNames.join('、') : (task.storageTargetName || task.storageTargetId) },
+              {
+                label: '存储目标',
+                value:
+                  task.storageTargetNames?.length > 0
+                    ? task.storageTargetNames.join('、')
+                    : task.storageTargetName || task.storageTargetId,
+              },
               { label: '保留天数', value: task.retentionDays },
               { label: '最大保留份数', value: task.maxBackups },
               { label: '压缩', value: task.compression },
@@ -40,17 +56,28 @@ export function BackupTaskDetailDrawer({ visible, task, onCancel }: BackupTaskDe
             ]}
           />
           {task.type === 'file' ? (
-            <Descriptions border column={1} data={[
-              {
-                label: '源路径',
-                value: task.sourcePaths?.length > 0
-                  ? task.sourcePaths.join('\n')
-                  : (task.sourcePath || '-'),
-              },
-              { label: '排除规则', value: task.excludePatterns.join(', ') || '-' },
-            ]} />
+            <Descriptions
+              border
+              column={1}
+              data={[
+                {
+                  label: '源路径',
+                  value:
+                    task.sourcePaths?.length > 0
+                      ? task.sourcePaths.join('\n')
+                      : task.sourcePath || '-',
+                },
+                { label: '排除规则', value: task.excludePatterns.join(', ') || '-' },
+              ]}
+            />
           ) : null}
-          {task.type === 'sqlite' ? <Descriptions border column={1} data={[{ label: 'SQLite 路径', value: task.dbPath || '-' }]} /> : null}
+          {task.type === 'sqlite' ? (
+            <Descriptions
+              border
+              column={1}
+              data={[{ label: 'SQLite 路径', value: task.dbPath || '-' }]}
+            />
+          ) : null}
           {task.type === 'mysql' || task.type === 'postgresql' ? (
             <Descriptions
               column={1}
@@ -60,7 +87,10 @@ export function BackupTaskDetailDrawer({ visible, task, onCancel }: BackupTaskDe
                 { label: '数据库端口', value: task.dbPort || '-' },
                 { label: '数据库用户', value: task.dbUser || '-' },
                 { label: '数据库名称', value: task.dbName || '-' },
-                { label: '数据库密码', value: task.maskedFields?.includes('dbPassword') ? '已配置' : '未配置' },
+                {
+                  label: '数据库密码',
+                  value: task.maskedFields?.includes('dbPassword') ? '已配置' : '未配置',
+                },
               ]}
             />
           ) : null}

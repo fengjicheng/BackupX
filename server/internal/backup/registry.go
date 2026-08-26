@@ -20,6 +20,18 @@ func NewRegistry(runners ...BackupRunner) *Registry {
 	return registry
 }
 
+// NewDefaultRegistry returns the runner set shared by Master and Agent.
+func NewDefaultRegistry() *Registry {
+	return NewRegistry(
+		NewFileRunner(),
+		NewSQLiteRunner(),
+		NewMySQLRunner(nil),
+		NewPostgreSQLRunner(nil),
+		NewSAPHANARunner(nil),
+		NewMongoDBRunner(nil),
+	)
+}
+
 func (r *Registry) Register(runner BackupRunner) {
 	if runner == nil {
 		return

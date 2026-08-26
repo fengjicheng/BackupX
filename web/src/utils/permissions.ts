@@ -7,7 +7,7 @@ export const UserRole = {
   Viewer: 'viewer',
 } as const
 
-export type UserRoleType = typeof UserRole[keyof typeof UserRole]
+export type UserRoleType = (typeof UserRole)[keyof typeof UserRole]
 
 /** 是否管理员角色。 */
 export function isAdmin(user?: UserInfo | null): boolean {

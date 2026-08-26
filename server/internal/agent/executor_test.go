@@ -18,7 +18,34 @@ import (
 	"time"
 
 	"backupx/server/internal/storage"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestReportRecordFailureUsesFinalizationContextAndLogsUpdateError(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		http.Error(w, "master unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	core, observed := observer.New(zapcore.ErrorLevel)
+	executor := NewExecutor(NewMasterClient(server.URL, "token", false), t.TempDir())
+	executor.SetLogger(zap.New(core))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	executor.reportRecordFailure(ctx, 42, "backup failed")
+
+	if requestCount != 1 {
+		t.Fatalf("terminal update requests = %d, want 1 despite canceled command context", requestCount)
+	}
+	if observed.Len() != 1 || observed.All()[0].Message != "report backup failure to master failed" {
+		t.Fatalf("observed logs = %#v", observed.All())
+	}
+}
 
 func TestBuildBackupTaskSpecParsesJSONSourcePaths(t *testing.T) {
 	spec := &TaskSpec{
@@ -322,6 +349,8 @@ type agentTestStorageFactory struct {
 func (f *agentTestStorageFactory) Type() storage.ProviderType {
 	return "agent_test_storage"
 }
+
+func (f *agentTestStorageFactory) SensitiveFields() []string { return nil }
 
 func (f *agentTestStorageFactory) New(_ context.Context, config map[string]any) (storage.StorageProvider, error) {
 	name, _ := config["name"].(string)

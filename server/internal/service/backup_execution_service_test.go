@@ -33,6 +33,8 @@ func (f *testStorageFactory) Type() storage.ProviderType {
 	return "test_storage"
 }
 
+func (f *testStorageFactory) SensitiveFields() []string { return nil }
+
 func (f *testStorageFactory) New(_ context.Context, config map[string]any) (storage.StorageProvider, error) {
 	name, _ := config["name"].(string)
 	provider := f.providers[name]
@@ -250,20 +252,6 @@ func TestBackupExecutionServiceRepositoryModeRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected repository export: name=%s size=%d", download.FileName, len(exported))
 	}
 
-	if err := os.WriteFile(largePath, bytes.Repeat([]byte{0}, len(large)), 0o640); err != nil {
-		t.Fatalf("damage source before restore: %v", err)
-	}
-	if err := executionService.RestoreRecord(ctx, second.ID); err != nil {
-		t.Fatalf("restore repository record returned error: %v", err)
-	}
-	restored, err := os.ReadFile(largePath)
-	if err != nil {
-		t.Fatalf("read restored source: %v", err)
-	}
-	if !bytes.Equal(restored, large) {
-		t.Fatalf("repository restore did not reproduce the source")
-	}
-
 	if err := recordService.Delete(ctx, first.ID); err != nil {
 		t.Fatalf("delete first repository record: %v", err)
 	}
@@ -425,40 +413,6 @@ func TestBackupExecutionServiceDeleteRecordDispatchesRemoteLocalDiskCleanup(t *t
 	}
 	if _, ok := calls[0].Payload["targetConfig"].(map[string]any); !ok {
 		t.Fatalf("expected targetConfig map, got %#v", calls[0].Payload["targetConfig"])
-	}
-}
-
-func TestBackupExecutionServiceRestoreRecordRejectsRemoteLocalDisk(t *testing.T) {
-	executionService, _, tasks, _, records, _, _ := newExecutionTestServices(t)
-	ctx := context.Background()
-	executionService.SetClusterDependencies(&nodeRepoStub{nodes: []model.Node{
-		{ID: 10, Name: "edge-a", Token: "edge-a-token", Status: model.NodeStatusOnline},
-	}}, &fakeDispatcher{})
-	task, err := tasks.FindByID(ctx, 1)
-	if err != nil {
-		t.Fatalf("FindByID task returned error: %v", err)
-	}
-	completedAt := time.Now().UTC()
-	record := &model.BackupRecord{
-		TaskID:          task.ID,
-		StorageTargetID: task.StorageTargetID,
-		NodeID:          10,
-		Status:          model.BackupRecordStatusSuccess,
-		FileName:        "remote.tar.gz",
-		StoragePath:     "file/2026/05/09/remote.tar.gz",
-		StartedAt:       completedAt.Add(-time.Second),
-		CompletedAt:     &completedAt,
-	}
-	if err := records.Create(ctx, record); err != nil {
-		t.Fatalf("Create record returned error: %v", err)
-	}
-
-	err = executionService.RestoreRecord(ctx, record.ID)
-	if err == nil {
-		t.Fatal("expected remote local_disk restore to be rejected")
-	}
-	if !strings.Contains(err.Error(), "Master 无法跨节点访问") {
-		t.Fatalf("expected cross-node local_disk error, got %v", err)
 	}
 }
 
@@ -709,27 +663,6 @@ func TestBackupExecutionServiceContinuesWhenStorageUsageSnapshotFails(t *testing
 	}
 	if len(provider.objects) != 1 {
 		t.Fatalf("expected upload to proceed, got %d uploaded objects", len(provider.objects))
-	}
-}
-
-func TestBackupRecordServiceRestore(t *testing.T) {
-	executionService, recordService, _, _, _, sourceDir, _ := newExecutionTestServices(t)
-	detail, err := executionService.RunTaskByIDSync(context.Background(), 1)
-	if err != nil {
-		t.Fatalf("RunTaskByIDSync returned error: %v", err)
-	}
-	if err := os.RemoveAll(sourceDir); err != nil {
-		t.Fatalf("RemoveAll returned error: %v", err)
-	}
-	if err := recordService.Restore(context.Background(), detail.ID); err != nil {
-		t.Fatalf("Restore returned error: %v", err)
-	}
-	content, err := os.ReadFile(filepath.Join(sourceDir, "index.html"))
-	if err != nil {
-		t.Fatalf("ReadFile returned error: %v", err)
-	}
-	if string(content) != "hello" {
-		t.Fatalf("unexpected restored content: %s", string(content))
 	}
 }
 

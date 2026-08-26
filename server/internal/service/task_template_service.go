@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"backupx/server/internal/apperror"
@@ -235,6 +234,3 @@ func toTemplateSummary(item *model.TaskTemplate) TaskTemplateSummary {
 		UpdatedAt:   item.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }
-
-// 确保未使用告警
-var _ = fmt.Sprintf

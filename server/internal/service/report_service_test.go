@@ -36,6 +36,7 @@ func newReportTestHarness(t *testing.T) (*ReportService, *BackupExecutionService
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeTestDatabase(t, db)
 	cipher := codec.NewConfigCipher("report-secret")
 	targets := repository.NewStorageTargetRepository(db)
 	tasks := repository.NewBackupTaskRepository(db)

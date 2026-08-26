@@ -24,7 +24,11 @@ export function AgentConnectionOptions({ value, onChange }: Props) {
     <>
       <Form.Item
         label="Agent 网络路径"
-        extra={<Text type="secondary">Agent 只需主动访问 Master，不需要从 Master 反向开放节点端口。</Text>}
+        extra={
+          <Text type="secondary">
+            Agent 只需主动访问 Master，不需要从 Master 反向开放节点端口。
+          </Text>
+        }
       >
         <Radio.Group
           type="button"
@@ -41,7 +45,11 @@ export function AgentConnectionOptions({ value, onChange }: Props) {
         <>
           <Form.Item
             label="Agent 连接地址"
-            extra={<Text type="secondary">可填写经 SSH 本地转发后的地址；留空则继续使用 Master 对外地址。</Text>}
+            extra={
+              <Text type="secondary">
+                可填写经 SSH 本地转发后的地址；留空则继续使用 Master 对外地址。
+              </Text>
+            }
           >
             <Input
               value={value.agentMasterUrl}
@@ -51,7 +59,11 @@ export function AgentConnectionOptions({ value, onChange }: Props) {
           </Form.Item>
           <Form.Item
             label="显式代理 URL"
-            extra={<Text type="secondary">支持 http、https、socks5、socks5h；SSH 动态转发可使用 socks5h://127.0.0.1:1080。</Text>}
+            extra={
+              <Text type="secondary">
+                支持 http、https、socks5、socks5h；SSH 动态转发可使用 socks5h://127.0.0.1:1080。
+              </Text>
+            }
           >
             <Input
               value={value.proxyUrl}
@@ -61,7 +73,11 @@ export function AgentConnectionOptions({ value, onChange }: Props) {
           </Form.Item>
           <Form.Item
             label="私有 CA 证书路径"
-            extra={<Text type="secondary">目标节点上已存在的 PEM 文件绝对路径；安装器会复制到受保护的 Agent 配置目录。</Text>}
+            extra={
+              <Text type="secondary">
+                目标节点上已存在的 PEM 文件绝对路径；安装器会复制到受保护的 Agent 配置目录。
+              </Text>
+            }
           >
             <Input
               value={value.caCertFile}
@@ -86,7 +102,15 @@ export function validateAgentConnection(value: AgentConnectionValue) {
   if (agentMasterUrl) {
     try {
       const parsed = new URL(agentMasterUrl)
-      if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.host || parsed.username || parsed.password || parsed.search || parsed.hash || /\s/.test(agentMasterUrl)) {
+      if (
+        !['http:', 'https:'].includes(parsed.protocol) ||
+        !parsed.host ||
+        parsed.username ||
+        parsed.password ||
+        parsed.search ||
+        parsed.hash ||
+        /\s/.test(agentMasterUrl)
+      ) {
         return 'Agent 连接地址必须是不含凭据、查询参数和片段的完整 HTTP(S) URL'
       }
     } catch {
@@ -96,14 +120,27 @@ export function validateAgentConnection(value: AgentConnectionValue) {
   if (proxyUrl) {
     try {
       const parsed = new URL(proxyUrl)
-      if (!['http:', 'https:', 'socks5:', 'socks5h:'].includes(parsed.protocol) || !parsed.host || parsed.username || parsed.password || (parsed.pathname !== '' && parsed.pathname !== '/') || parsed.search || parsed.hash || /\s/.test(proxyUrl)) {
+      if (
+        !['http:', 'https:', 'socks5:', 'socks5h:'].includes(parsed.protocol) ||
+        !parsed.host ||
+        parsed.username ||
+        parsed.password ||
+        (parsed.pathname !== '' && parsed.pathname !== '/') ||
+        parsed.search ||
+        parsed.hash ||
+        /\s/.test(proxyUrl)
+      ) {
         return '代理 URL 仅支持无凭据、无路径的 http、https、socks5 或 socks5h 地址'
       }
     } catch {
       return '代理 URL 仅支持 http、https、socks5 或 socks5h'
     }
   }
-  if (caCertFile && (!/^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/.test(caCertFile) || caCertFile.split('/').some((part) => part === '..'))) {
+  if (
+    caCertFile &&
+    (!/^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/.test(caCertFile) ||
+      caCertFile.split('/').some((part) => part === '..'))
+  ) {
     return '私有 CA 证书必须使用不含空格或特殊字符的绝对路径'
   }
   return ''

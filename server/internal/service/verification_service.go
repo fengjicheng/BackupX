@@ -39,7 +39,7 @@ type VerificationService struct {
 	notifier        VerificationNotifier
 	tempDir         string
 	semaphore       chan struct{}
-	async           func(func())
+	async           func(func(context.Context)) bool
 	now             func() time.Time
 	metrics         *metrics.Metrics
 }
@@ -47,6 +47,13 @@ type VerificationService struct {
 // SetMetrics 注入 Prometheus 采集器。
 func (s *VerificationService) SetMetrics(m *metrics.Metrics) {
 	s.metrics = m
+}
+
+// SetBackgroundRunner binds local verification work to the application lifecycle.
+func (s *VerificationService) SetBackgroundRunner(runner BackgroundRunner) {
+	if runner != nil {
+		s.async = runner.Go
+	}
 }
 
 // VerificationNotifier 给用户推送验证完成/失败通知。
@@ -129,7 +136,7 @@ func NewVerificationService(
 		notifier:        noopVerificationNotifier{},
 		tempDir:         tempDir,
 		semaphore:       make(chan struct{}, maxConcurrent),
-		async:           func(job func()) { go job() },
+		async:           runDetached,
 		now:             func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -231,10 +238,16 @@ func (s *VerificationService) Start(ctx context.Context, backupRecordID uint, mo
 	if err := s.verifications.Create(ctx, verification); err != nil {
 		return nil, apperror.Internal("VERIFY_RECORD_CREATE_FAILED", "无法创建验证记录", err)
 	}
-	run := func() {
-		s.executeLocally(context.Background(), verification.ID, task, record)
+	run := func(runCtx context.Context) {
+		s.executeLocally(runCtx, verification.ID, task, record)
 	}
-	s.async(run)
+	if !s.async(run) {
+		message := "服务正在关闭，验证任务未启动"
+		if finalizeErr := s.finalize(ctx, verification.ID, model.VerificationRecordStatusFailed, message, "", ""); finalizeErr != nil {
+			return nil, apperror.Internal("VERIFY_FINALIZE_FAILED", "无法写回验证失败状态", finalizeErr)
+		}
+		return nil, backgroundTaskUnavailable("VERIFY_SERVICE_SHUTTING_DOWN")
+	}
 	return s.getDetail(ctx, verification.ID)
 }
 
@@ -247,24 +260,36 @@ func (s *VerificationService) validateClusterAccessible(ctx context.Context, rec
 
 // executeLocally 异步执行验证：下载 → 解密 → 解压 → 按类型校验。
 func (s *VerificationService) executeLocally(ctx context.Context, verID uint, task *model.BackupTask, backupRecord *model.BackupRecord) {
-	s.semaphore <- struct{}{}
-	defer func() { <-s.semaphore }()
-
 	logger := backup.NewExecutionLogger(verID, s.logHub)
 	status := model.VerificationRecordStatusFailed
 	errMessage := ""
 	summary := ""
 
 	defer func() {
-		_ = s.finalize(ctx, verID, status, errMessage, summary, logger.String())
+		persistCtx, cancel := finalizationContext(ctx)
+		defer cancel()
+		if finalizeErr := s.finalize(persistCtx, verID, status, errMessage, summary, logger.String()); finalizeErr != nil {
+			logger.Errorf("写回验证记录失败：%v", finalizeErr)
+		}
 		s.logHub.Complete(verID, status)
 		// 失败时推送通知（best-effort）
 		if status == model.VerificationRecordStatusFailed && s.notifier != nil {
-			if record, err := s.verifications.FindByID(ctx, verID); err == nil && record != nil {
-				_ = s.notifier.NotifyVerificationResult(ctx, task, record)
+			if record, findErr := s.verifications.FindByID(persistCtx, verID); findErr != nil {
+				logger.Warnf("读取验证记录以发送通知失败：%v", findErr)
+			} else if record != nil {
+				if notifyErr := s.notifier.NotifyVerificationResult(persistCtx, task, record); notifyErr != nil {
+					logger.Warnf("发送验证失败通知失败：%v", notifyErr)
+				}
 			}
 		}
 	}()
+
+	if !acquireBackgroundSlot(ctx, s.semaphore) {
+		errMessage = ctx.Err().Error()
+		logger.Warnf("等待验证执行槽时任务被取消：%v", ctx.Err())
+		return
+	}
+	defer func() { <-s.semaphore }()
 
 	logger.Infof("开始验证备份记录 #%d（模式：%s）", backupRecord.ID, model.VerificationModeQuick)
 

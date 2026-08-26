@@ -16,11 +16,12 @@ vi.mock('../../services/auth', () => ({
 }))
 
 vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (state: unknown) => unknown) => selector({
-    status: 'anonymous',
-    login: mocks.login,
-    setup: mocks.setup,
-  }),
+  useAuthStore: (selector: (state: unknown) => unknown) =>
+    selector({
+      status: 'anonymous',
+      login: mocks.login,
+      setup: mocks.setup,
+    }),
 }))
 
 vi.mock('../../utils/webauthn', () => ({
@@ -51,7 +52,9 @@ describe('LoginPage initialization', () => {
 
     expect(await screen.findByText('System setup')).toBeInTheDocument()
     expect(screen.getByText('Create the first administrator account.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Create administrator and sign in' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Create administrator and sign in' }),
+    ).toBeInTheDocument()
   })
 
   it('does not mistake an unreachable fresh install for an initialized system', async () => {

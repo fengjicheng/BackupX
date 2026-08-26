@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"backupx/server/internal/lifecycle"
 	"backupx/server/internal/model"
 	"backupx/server/internal/repository"
 )
@@ -130,4 +131,41 @@ func TestAuditService_WebhookDisabledWhenURLEmpty(t *testing.T) {
 	// 给 webhook 一些时间（即便它不会被调用）
 	time.Sleep(100 * time.Millisecond)
 	// 无显式断言：能不 panic 即算通过
+}
+
+func TestAuditServiceSupervisorShutdownFlushesAcceptedRecord(t *testing.T) {
+	repo := newFakeAuditRepo()
+	supervisor := lifecycle.NewSupervisor(context.Background())
+	svc := NewAuditService(repo)
+	svc.SetBackgroundRunner(supervisor)
+
+	svc.Record(AuditEntry{Username: "alice", Category: "auth", Action: "logout"})
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := supervisor.Shutdown(waitCtx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	select {
+	case <-repo.created:
+	default:
+		t.Fatal("accepted audit record was not flushed during shutdown")
+	}
+}
+
+func TestAuditServiceBoundsInFlightWork(t *testing.T) {
+	repo := newFakeAuditRepo()
+	svc := NewAuditService(repo)
+	svc.inFlight = make(chan struct{}, 1)
+
+	accepted := 0
+	svc.async = func(func(context.Context)) bool {
+		accepted++
+		return true
+	}
+
+	svc.Record(AuditEntry{Category: "auth", Action: "first"})
+	svc.Record(AuditEntry{Category: "auth", Action: "second"})
+	if accepted != 1 {
+		t.Fatalf("accepted tasks = %d, want 1", accepted)
+	}
 }

@@ -16,7 +16,14 @@ interface AdminDataSectionProps {
   children: ReactNode
 }
 
-export function AdminDataSection({ title, description, actions, metrics, toolbar, children }: AdminDataSectionProps) {
+export function AdminDataSection({
+  title,
+  description,
+  actions,
+  metrics,
+  toolbar,
+  children,
+}: AdminDataSectionProps) {
   return (
     <section className="admin-section" aria-labelledby="admin-section-title">
       <header className="admin-section__header">

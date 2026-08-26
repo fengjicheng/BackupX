@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Modal, Steps, Button, Space, Message, Spin } from '@arco-design/web-react'
 import { Step1NodeName, type Mode } from './wizard/Step1NodeName'
-import { Step2DeployOptions, isReleaseVersion, type DeployOptions } from './wizard/Step2DeployOptions'
+import {
+  Step2DeployOptions,
+  isReleaseVersion,
+  type DeployOptions,
+} from './wizard/Step2DeployOptions'
 import { Step3CommandPreview } from './wizard/Step3CommandPreview'
 import { BatchCommandTable, type BatchCommandRow } from './BatchCommandTable'
 import type { InstallTokenInput, InstallTokenResult } from '../../types/nodes'
@@ -20,7 +24,13 @@ interface Props {
   fixedNode?: { id: number; name: string }
 }
 
-export function AgentInstallWizard({ visible, onClose, onSuccess, masterVersion, fixedNode }: Props) {
+export function AgentInstallWizard({
+  visible,
+  onClose,
+  onSuccess,
+  masterVersion,
+  fixedNode,
+}: Props) {
   const [step, setStep] = useState(fixedNode ? 1 : 0)
   const [mode, setMode] = useState<Mode>('single')
   const [singleName, setSingleName] = useState('')
@@ -76,7 +86,10 @@ export function AgentInstallWizard({ visible, onClose, onSuccess, masterVersion,
   }
 
   const parseBatchNames = (): string[] =>
-    batchText.split('\n').map((s) => s.trim()).filter(Boolean)
+    batchText
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
 
   const handleNextFromStep1 = () => {
     if (mode === 'single') {
@@ -154,10 +167,13 @@ export function AgentInstallWizard({ visible, onClose, onSuccess, masterVersion,
   const retryBatchNode = async (row: BatchCommandRow) => {
     setSubmitting(true)
     try {
-      const next = await deployFlow.regenerateNode({ id: row.nodeId, name: row.nodeName }, toInstallTokenInput(deploy))
-      setBatchRows((rows) => rows.map((item) => (
-        item.nodeId === row.nodeId ? toBatchRows([next])[0] : item
-      )))
+      const next = await deployFlow.regenerateNode(
+        { id: row.nodeId, name: row.nodeName },
+        toInstallTokenInput(deploy),
+      )
+      setBatchRows((rows) =>
+        rows.map((item) => (item.nodeId === row.nodeId ? toBatchRows([next])[0] : item)),
+      )
       if (next.status === 'ready') {
         Message.success(`节点「${row.nodeName}」安装命令已重新生成`)
       } else {
@@ -231,9 +247,7 @@ export function AgentInstallWizard({ visible, onClose, onSuccess, masterVersion,
           <Step2DeployOptions masterVersion={masterVersion} value={deploy} onChange={setDeploy} />
           <div style={{ marginTop: 24, textAlign: 'right' }}>
             <Space>
-              {!fixedNode && (
-                <Button onClick={() => setStep(0)}>上一步</Button>
-              )}
+              {!fixedNode && <Button onClick={() => setStep(0)}>上一步</Button>}
               <Button onClick={handleClose}>取消</Button>
               <Button type="primary" onClick={handleGenerate} loading={submitting}>
                 生成安装命令
@@ -254,7 +268,9 @@ export function AgentInstallWizard({ visible, onClose, onSuccess, masterVersion,
               onRegenerate={regenerateSingle}
             />
           )}
-          {batchRows.length > 0 && <BatchCommandTable rows={batchRows} onRetryNode={retryBatchNode} />}
+          {batchRows.length > 0 && (
+            <BatchCommandTable rows={batchRows} onRetryNode={retryBatchNode} />
+          )}
           <div style={{ marginTop: 24, textAlign: 'right' }}>
             <Button type="primary" onClick={handleClose}>
               完成
@@ -265,11 +281,17 @@ export function AgentInstallWizard({ visible, onClose, onSuccess, masterVersion,
     </Modal>
   )
 
-  function applySingleOrTableResult(rows: AgentDeployRow[], fallbackNode?: { id: number; name: string }) {
+  function applySingleOrTableResult(
+    rows: AgentDeployRow[],
+    fallbackNode?: { id: number; name: string },
+  ) {
     const row = rows[0]
     if (!row) return
     if (row.status === 'ready' && row.installToken) {
-      setSingleNodeInfo({ id: row.nodeId || fallbackNode?.id || 0, name: row.nodeName || fallbackNode?.name || '' })
+      setSingleNodeInfo({
+        id: row.nodeId || fallbackNode?.id || 0,
+        name: row.nodeName || fallbackNode?.name || '',
+      })
       setSingleToken(row.installToken)
       setBatchRows([])
       return
@@ -288,7 +310,8 @@ function toInstallTokenInput(deploy: DeployOptions): InstallTokenInput {
     agentVersion: deploy.agentVersion.trim(),
     downloadSrc: deploy.downloadSrc,
     ttlSeconds: deploy.ttlSeconds,
-    agentMasterUrl: deploy.connectionMode === 'restricted' ? deploy.agentMasterUrl.trim() : undefined,
+    agentMasterUrl:
+      deploy.connectionMode === 'restricted' ? deploy.agentMasterUrl.trim() : undefined,
     proxyUrl: deploy.connectionMode === 'restricted' ? deploy.proxyUrl.trim() : undefined,
     caCertFile: deploy.connectionMode === 'restricted' ? deploy.caCertFile.trim() : undefined,
   }

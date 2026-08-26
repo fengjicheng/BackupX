@@ -14,7 +14,16 @@ interface DatabasePickerProps {
   onChange: (value: string) => void
 }
 
-export function DatabasePicker({ dbType, dbHost, dbPort, dbUser, dbPassword, nodeId, value, onChange }: DatabasePickerProps) {
+export function DatabasePicker({
+  dbType,
+  dbHost,
+  dbPort,
+  dbUser,
+  dbPassword,
+  nodeId,
+  value,
+  onChange,
+}: DatabasePickerProps) {
   const [databases, setDatabases] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [discovered, setDiscovered] = useState(false)
@@ -45,7 +54,8 @@ export function DatabasePicker({ dbType, dbHost, dbPort, dbUser, dbPassword, nod
         setError('未发现用户数据库')
       }
     } catch (discoverError: any) {
-      const msg = discoverError?.response?.data?.message ?? discoverError?.message ?? '发现数据库失败'
+      const msg =
+        discoverError?.response?.data?.message ?? discoverError?.message ?? '发现数据库失败'
       setError(msg)
       Message.error(msg)
     } finally {
@@ -96,7 +106,15 @@ export function DatabasePicker({ dbType, dbHost, dbPort, dbUser, dbPassword, nod
       {loading && <Spin size={16} />}
 
       {discovered && databases.length > 0 && (
-        <div style={{ border: '1px solid var(--color-border-2)', borderRadius: 4, padding: '8px 12px', maxHeight: 200, overflow: 'auto' }}>
+        <div
+          style={{
+            border: '1px solid var(--color-border-2)',
+            borderRadius: 4,
+            padding: '8px 12px',
+            maxHeight: 200,
+            overflow: 'auto',
+          }}
+        >
           <Space size="mini" style={{ marginBottom: 8 }}>
             <Button type="text" size="mini" onClick={handleSelectAll}>
               全选

@@ -19,6 +19,7 @@ import (
 	"backupx/server/internal/repository"
 	"backupx/server/internal/storage"
 	"backupx/server/internal/storage/codec"
+	"go.uber.org/zap"
 )
 
 // AgentService 实现 Master 端 Agent 协议，提供给远程 Agent 通过 HTTP 调用。
@@ -32,6 +33,8 @@ type AgentService struct {
 	restoreRepo repository.RestoreRecordRepository
 	registry    *storage.Registry
 	cipher      *codec.ConfigCipher
+	logger      *zap.Logger
+	background  BackgroundRunner
 }
 
 func NewAgentService(
@@ -51,7 +54,22 @@ func NewAgentService(
 		cmdRepo:     cmdRepo,
 		registry:    registry,
 		cipher:      cipher,
+		logger:      zap.NewNop(),
 	}
+}
+
+// SetLogger attaches the application logger used by background command
+// reconciliation. The no-op default keeps the service safe in tests.
+func (s *AgentService) SetLogger(logger *zap.Logger) {
+	if logger != nil {
+		s.logger = logger
+	}
+}
+
+// SetBackgroundRunner makes the command timeout monitor part of the
+// application lifecycle so shutdown waits for an in-flight reconciliation.
+func (s *AgentService) SetBackgroundRunner(background BackgroundRunner) {
+	s.background = background
 }
 
 // SetRestoreRepository 注入恢复记录仓储，用于命令超时时联动 restore_record 状态。
@@ -117,6 +135,16 @@ func (s *AgentService) SubmitCommandResult(ctx context.Context, node *model.Node
 	if cmd.NodeID != node.ID {
 		return apperror.Unauthorized("AGENT_COMMAND_FORBIDDEN", "命令不属于当前节点", nil)
 	}
+	// A failed terminal report may be retried after the command row was already
+	// completed but before its linked business record was updated. Re-run that
+	// idempotent convergence step so a transient database error cannot leave a
+	// backup or restore record stuck in running forever.
+	if cmd.Status == model.AgentCommandStatusFailed {
+		if result.Success {
+			return nil
+		}
+		return s.failLinkedRecord(ctx, cmd, agentCommandFailureMessage(result.ErrorMessage))
+	}
 	now := time.Now().UTC()
 	if result.Success {
 		cmd.Status = model.AgentCommandStatusSucceeded
@@ -128,8 +156,21 @@ func (s *AgentService) SubmitCommandResult(ctx context.Context, node *model.Node
 		cmd.Result = string(result.Result)
 	}
 	cmd.CompletedAt = &now
-	_, err = s.cmdRepo.CompleteDispatched(ctx, cmd)
-	return err
+	completed, err := s.cmdRepo.CompleteDispatched(ctx, cmd)
+	if err != nil || !completed || result.Success {
+		return err
+	}
+	persistCtx, cancel := finalizationContext(ctx)
+	defer cancel()
+	return s.failLinkedRecord(persistCtx, cmd, agentCommandFailureMessage(result.ErrorMessage))
+}
+
+func agentCommandFailureMessage(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return "Agent 命令执行失败"
+	}
+	return "Agent 命令执行失败：" + message
 }
 
 // AgentTaskSpec 给 Agent 返回的任务规格，包含解密后的存储配置，供 Agent 直接执行。
@@ -616,19 +657,29 @@ func (s *AgentService) StartCommandTimeoutMonitor(ctx context.Context, interval 
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
 	}
-	ticker := time.NewTicker(interval)
-	go func() {
+	monitor := func(runCtx context.Context) {
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
 				threshold := time.Now().UTC().Add(-timeout)
-				s.processStaleCommands(ctx, threshold)
+				s.processStaleCommands(runCtx, threshold)
 			}
 		}
-	}()
+	}
+	if s.background != nil {
+		if !s.background.Go(monitor) {
+			s.logger.Warn("agent command timeout monitor not started: application is shutting down")
+		}
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	go monitor(ctx)
 }
 
 // processStaleCommands 扫描已超时的 pending/dispatched 命令并联动关联记录。
@@ -636,12 +687,24 @@ func (s *AgentService) StartCommandTimeoutMonitor(ctx context.Context, interval 
 // 单条失败不影响后续处理。
 func (s *AgentService) processStaleCommands(ctx context.Context, threshold time.Time) {
 	commands, err := s.cmdRepo.ListStaleActive(ctx, threshold)
-	if err != nil || len(commands) == 0 {
+	if err != nil {
+		s.logger.Error("list stale agent commands failed", zap.Error(err))
+		return
+	}
+	if len(commands) == 0 {
 		return
 	}
 	for i := range commands {
 		cmd := commands[i]
-		if s.commandStillActive(ctx, &cmd, threshold) {
+		stillActive, activeErr := s.commandStillActive(ctx, &cmd, threshold)
+		if activeErr != nil {
+			s.logger.Warn("check stale agent command activity failed",
+				zap.Uint("command_id", cmd.ID),
+				zap.String("command_type", cmd.Type),
+				zap.Error(activeErr))
+			continue
+		}
+		if stillActive {
 			continue
 		}
 		now := time.Now().UTC()
@@ -649,18 +712,33 @@ func (s *AgentService) processStaleCommands(ctx context.Context, threshold time.
 		cmd.ErrorMessage = "agent did not report result before timeout"
 		cmd.CompletedAt = &now
 		timedOut, err := s.cmdRepo.TimeoutActive(ctx, &cmd)
-		if err != nil || !timedOut {
+		if err != nil {
+			s.logger.Error("mark agent command timed out failed",
+				zap.Uint("command_id", cmd.ID),
+				zap.String("command_type", cmd.Type),
+				zap.Error(err))
 			continue
 		}
-		s.failLinkedRecord(ctx, &cmd)
+		if !timedOut {
+			continue
+		}
+		persistCtx, cancel := finalizationContext(ctx)
+		failErr := s.failLinkedRecord(persistCtx, &cmd)
+		cancel()
+		if failErr != nil {
+			s.logger.Error("mark timed-out agent command record failed",
+				zap.Uint("command_id", cmd.ID),
+				zap.String("command_type", cmd.Type),
+				zap.Error(failErr))
+		}
 	}
 }
 
 // commandStillActive 用关联记录状态、记录更新时间和节点心跳作为长任务续租信号。
 // 仅 run_task / restore_record 允许续租，避免短 RPC 命令被在线节点长期保留。
-func (s *AgentService) commandStillActive(ctx context.Context, cmd *model.AgentCommand, threshold time.Time) bool {
+func (s *AgentService) commandStillActive(ctx context.Context, cmd *model.AgentCommand, threshold time.Time) (bool, error) {
 	if cmd.Status != model.AgentCommandStatusDispatched {
-		return false
+		return false, nil
 	}
 	switch cmd.Type {
 	case model.AgentCommandTypeRunTask:
@@ -668,90 +746,121 @@ func (s *AgentService) commandStillActive(ctx context.Context, cmd *model.AgentC
 			RecordID uint `json:"recordId"`
 		}
 		if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil || payload.RecordID == 0 {
-			return false
+			return false, nil
 		}
 		record, err := s.recordRepo.FindByID(ctx, payload.RecordID)
-		if err != nil || record == nil || record.Status != model.BackupRecordStatusRunning {
-			return false
+		if err != nil {
+			return false, fmt.Errorf("find backup record %d: %w", payload.RecordID, err)
 		}
-		if s.nodeRecentlySeen(ctx, cmd.NodeID, threshold) {
-			return true
+		if record == nil || record.Status != model.BackupRecordStatusRunning {
+			return false, nil
 		}
-		return record.UpdatedAt.After(threshold)
+		nodeActive, err := s.nodeRecentlySeen(ctx, cmd.NodeID, threshold)
+		if err != nil {
+			return false, err
+		}
+		return nodeActive || record.UpdatedAt.After(threshold), nil
 	case model.AgentCommandTypeRestoreRecord:
 		if s.restoreRepo == nil {
-			return false
+			return false, nil
 		}
 		var payload struct {
 			RestoreRecordID uint `json:"restoreRecordId"`
 		}
 		if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil || payload.RestoreRecordID == 0 {
-			return false
+			return false, nil
 		}
 		restore, err := s.restoreRepo.FindByID(ctx, payload.RestoreRecordID)
-		if err != nil || restore == nil || restore.Status != model.RestoreRecordStatusRunning {
-			return false
+		if err != nil {
+			return false, fmt.Errorf("find restore record %d: %w", payload.RestoreRecordID, err)
 		}
-		if s.nodeRecentlySeen(ctx, cmd.NodeID, threshold) {
-			return true
+		if restore == nil || restore.Status != model.RestoreRecordStatusRunning {
+			return false, nil
 		}
-		return restore.UpdatedAt.After(threshold)
+		nodeActive, err := s.nodeRecentlySeen(ctx, cmd.NodeID, threshold)
+		if err != nil {
+			return false, err
+		}
+		return nodeActive || restore.UpdatedAt.After(threshold), nil
 	default:
-		return false
+		return false, nil
 	}
 }
 
-func (s *AgentService) nodeRecentlySeen(ctx context.Context, nodeID uint, threshold time.Time) bool {
+func (s *AgentService) nodeRecentlySeen(ctx context.Context, nodeID uint, threshold time.Time) (bool, error) {
 	node, err := s.nodeRepo.FindByID(ctx, nodeID)
-	if err != nil || node == nil {
-		return false
+	if err != nil {
+		return false, fmt.Errorf("find agent node %d: %w", nodeID, err)
 	}
-	return node.Status == model.NodeStatusOnline && node.LastSeen.After(threshold)
+	if node == nil {
+		return false, nil
+	}
+	return node.Status == model.NodeStatusOnline && node.LastSeen.After(threshold), nil
 }
 
 // failLinkedRecord 根据命令类型把关联记录标记为 failed。
 // 只对仍然处于 running 状态的记录生效，避免覆盖已完成的结果。
-func (s *AgentService) failLinkedRecord(ctx context.Context, cmd *model.AgentCommand) {
-	const failureMessage = "Agent 未在超时前回传状态（节点可能已离线或崩溃）"
+func (s *AgentService) failLinkedRecord(ctx context.Context, cmd *model.AgentCommand, messages ...string) error {
+	failureMessage := "Agent 未在超时前回传状态（节点可能已离线或崩溃）"
+	if len(messages) > 0 && strings.TrimSpace(messages[0]) != "" {
+		failureMessage = strings.TrimSpace(messages[0])
+	}
 	switch cmd.Type {
 	case model.AgentCommandTypeRunTask:
 		var payload struct {
 			RecordID uint `json:"recordId"`
 		}
-		if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil || payload.RecordID == 0 {
-			return
+		if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil {
+			return fmt.Errorf("decode run_task payload: %w", err)
+		}
+		if payload.RecordID == 0 {
+			return errors.New("run_task payload has no recordId")
 		}
 		record, err := s.recordRepo.FindByID(ctx, payload.RecordID)
-		if err != nil || record == nil || record.Status != model.BackupRecordStatusRunning {
-			return
+		if err != nil {
+			return fmt.Errorf("find backup record %d: %w", payload.RecordID, err)
+		}
+		if record == nil || record.Status != model.BackupRecordStatusRunning {
+			return nil
 		}
 		completedAt := time.Now().UTC()
 		record.Status = model.BackupRecordStatusFailed
 		record.ErrorMessage = failureMessage
 		record.CompletedAt = &completedAt
 		record.DurationSeconds = int(completedAt.Sub(record.StartedAt).Seconds())
-		_ = s.recordRepo.Update(ctx, record)
+		if err := s.recordRepo.Update(ctx, record); err != nil {
+			return fmt.Errorf("update backup record %d: %w", record.ID, err)
+		}
 	case model.AgentCommandTypeRestoreRecord:
 		if s.restoreRepo == nil {
-			return
+			return errors.New("restore record repository is not configured")
 		}
 		var payload struct {
 			RestoreRecordID uint `json:"restoreRecordId"`
 		}
-		if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil || payload.RestoreRecordID == 0 {
-			return
+		if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil {
+			return fmt.Errorf("decode restore_record payload: %w", err)
+		}
+		if payload.RestoreRecordID == 0 {
+			return errors.New("restore_record payload has no restoreRecordId")
 		}
 		restore, err := s.restoreRepo.FindByID(ctx, payload.RestoreRecordID)
-		if err != nil || restore == nil || restore.Status != model.RestoreRecordStatusRunning {
-			return
+		if err != nil {
+			return fmt.Errorf("find restore record %d: %w", payload.RestoreRecordID, err)
+		}
+		if restore == nil || restore.Status != model.RestoreRecordStatusRunning {
+			return nil
 		}
 		completedAt := time.Now().UTC()
 		restore.Status = model.RestoreRecordStatusFailed
 		restore.ErrorMessage = failureMessage
 		restore.CompletedAt = &completedAt
 		restore.DurationSeconds = int(completedAt.Sub(restore.StartedAt).Seconds())
-		_ = s.restoreRepo.Update(ctx, restore)
+		if err := s.restoreRepo.Update(ctx, restore); err != nil {
+			return fmt.Errorf("update restore record %d: %w", restore.ID, err)
+		}
 	}
+	return nil
 }
 
 // AgentSelfStatus 是 /api/v1/agent/self 端点返回给 Agent 的轻量状态摘要。

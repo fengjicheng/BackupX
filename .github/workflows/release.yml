@@ -18,11 +18,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 v1.2.3）'
+        description: "版本号（如 v1.2.3）"
         required: true
         type: string
 
@@ -65,7 +65,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: "1.25"
           cache-dependency-path: server/go.sum
 
       - name: Verify backend
@@ -83,14 +83,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
           cache-dependency-path: web/package-lock.json
 
       - name: Verify frontend
         working-directory: web
         run: |
           npm ci
+          npm audit --omit=dev --audit-level=high
+          npm run lint
+          npm run format:check
           npm run test
 
   # ─── Job 1: 构建前端 ───
@@ -105,8 +108,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
           cache-dependency-path: web/package-lock.json
 
       - name: Install & Build
@@ -143,7 +146,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: "1.25"
           cache-dependency-path: server/go.sum
 
       - name: Download frontend artifact
@@ -157,7 +160,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: '0'
+          CGO_ENABLED: "0"
         run: |
           go build \
             -trimpath \
@@ -172,13 +175,13 @@ jobs:
           cp backupx "${ARCHIVE_NAME}/"
           cp -r web/dist "${ARCHIVE_NAME}/web"
           cp server/config.example.yaml "${ARCHIVE_NAME}/"
-          cp deploy/install.sh "${ARCHIVE_NAME}/" 2>/dev/null || true
-          cp deploy/backupx.service "${ARCHIVE_NAME}/" 2>/dev/null || true
+          cp deploy/install.sh "${ARCHIVE_NAME}/"
+          cp deploy/backupx.service "${ARCHIVE_NAME}/"
           # v2.2+: 随发布包提供 Grafana dashboard 与 nginx.conf 模板
           if [ -d deploy/grafana ]; then
             cp -r deploy/grafana "${ARCHIVE_NAME}/grafana"
           fi
-          cp deploy/nginx.conf "${ARCHIVE_NAME}/nginx.conf" 2>/dev/null || true
+          cp deploy/nginx.conf "${ARCHIVE_NAME}/nginx.conf"
           tar czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
           cp "${ARCHIVE_NAME}.tar.gz" "backupx-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
           sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
@@ -199,7 +202,7 @@ jobs:
   # ─── Job 3: Docker 多架构 → Docker Hub ───
   build-docker:
     name: Build & Push Docker
-    needs: build-web
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -226,7 +229,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/backupx:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/backupx:${{ env.VERSION }}
+            ${{ !contains(env.VERSION, '-') && format('{0}/backupx:latest', secrets.DOCKERHUB_USERNAME) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

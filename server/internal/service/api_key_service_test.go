@@ -24,6 +24,7 @@ func newApiKeyTestService(t *testing.T) *ApiKeyService {
 	if err != nil {
 		t.Fatalf("database.Open: %v", err)
 	}
+	closeTestDatabase(t, db)
 	return NewApiKeyService(repository.NewApiKeyRepository(db))
 }
 

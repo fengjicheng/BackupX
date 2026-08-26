@@ -15,6 +15,10 @@ interface DatabaseDiscoverResult {
 }
 
 export async function discoverDatabases(payload: DatabaseDiscoverPayload): Promise<string[]> {
-  const response = await http.post<ApiEnvelope<DatabaseDiscoverResult>>('/database/discover', payload, { timeout: 20000 })
+  const response = await http.post<ApiEnvelope<DatabaseDiscoverResult>>(
+    '/database/discover',
+    payload,
+    { timeout: 20000 },
+  )
   return unwrapApiEnvelope(response.data).databases ?? []
 }

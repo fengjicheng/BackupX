@@ -37,6 +37,7 @@ func newLockTestHarness(t *testing.T) (*BackupRecordService, *BackupExecutionSer
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeTestDatabase(t, db)
 	cipher := codec.NewConfigCipher("lock-secret")
 	targets := repository.NewStorageTargetRepository(db)
 	tasks := repository.NewBackupTaskRepository(db)

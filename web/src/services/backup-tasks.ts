@@ -1,5 +1,10 @@
 import { http, getAccessToken, type ApiEnvelope, unwrapApiEnvelope } from './http'
-import type { BackupTaskDetail, BackupTaskPayload, BackupTaskSummary, BackupTaskTogglePayload } from '../types/backup-tasks'
+import type {
+  BackupTaskDetail,
+  BackupTaskPayload,
+  BackupTaskSummary,
+  BackupTaskTogglePayload,
+} from '../types/backup-tasks'
 import type { BackupRecordDetail } from '../types/backup-records'
 
 export async function listBackupTasks() {
@@ -28,7 +33,10 @@ export async function deleteBackupTask(id: number) {
 }
 
 export async function toggleBackupTask(id: number, payload: BackupTaskTogglePayload) {
-  const response = await http.put<ApiEnvelope<BackupTaskSummary>>(`/backup/tasks/${id}/toggle`, payload)
+  const response = await http.put<ApiEnvelope<BackupTaskSummary>>(
+    `/backup/tasks/${id}/toggle`,
+    payload,
+  )
   return unwrapApiEnvelope(response.data)
 }
 
@@ -51,12 +59,17 @@ export interface BatchResult {
 }
 
 export async function batchToggleTasks(ids: number[], enabled: boolean) {
-  const response = await http.post<ApiEnvelope<BatchResult[]>>('/backup/tasks/batch/toggle', { ids, enabled })
+  const response = await http.post<ApiEnvelope<BatchResult[]>>('/backup/tasks/batch/toggle', {
+    ids,
+    enabled,
+  })
   return unwrapApiEnvelope(response.data) ?? []
 }
 
 export async function batchDeleteTasks(ids: number[]) {
-  const response = await http.post<ApiEnvelope<BatchResult[]>>('/backup/tasks/batch/delete', { ids })
+  const response = await http.post<ApiEnvelope<BatchResult[]>>('/backup/tasks/batch/delete', {
+    ids,
+  })
   return unwrapApiEnvelope(response.data) ?? []
 }
 

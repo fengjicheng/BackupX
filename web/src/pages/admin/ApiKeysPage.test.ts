@@ -18,14 +18,21 @@ describe('resolveApiKeyStatus', () => {
   it('derives active, disabled, and expired states from the credential lifecycle', () => {
     expect(resolveApiKeyStatus(baseKey, now)).toBe('active')
     expect(resolveApiKeyStatus({ ...baseKey, disabled: true }, now)).toBe('disabled')
-    expect(resolveApiKeyStatus({ ...baseKey, expiresAt: '2026-08-06T23:59:59Z' }, now)).toBe('expired')
+    expect(resolveApiKeyStatus({ ...baseKey, expiresAt: '2026-08-06T23:59:59Z' }, now)).toBe(
+      'expired',
+    )
   })
 
   it('keeps expiration authoritative when an expired key is also disabled', () => {
-    expect(resolveApiKeyStatus({
-      ...baseKey,
-      disabled: true,
-      expiresAt: '2026-08-01T00:00:00Z',
-    }, now)).toBe('expired')
+    expect(
+      resolveApiKeyStatus(
+        {
+          ...baseKey,
+          disabled: true,
+          expiresAt: '2026-08-01T00:00:00Z',
+        },
+        now,
+      ),
+    ).toBe('expired')
   })
 })

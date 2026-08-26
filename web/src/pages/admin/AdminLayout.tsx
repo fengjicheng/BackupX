@@ -25,11 +25,11 @@ export function AdminLayout() {
         className="admin-page__header"
         title="访问管理"
         subTitle="统一管理系统账号、角色权限、多因素认证与程序化访问凭据。"
-        extra={(
+        extra={
           <Button icon={<IconList />} onClick={() => navigate('/audit')}>
             访问审计
           </Button>
-        )}
+        }
       />
 
       <nav className="admin-page__nav" aria-label="访问管理分区">

@@ -64,6 +64,9 @@ export async function deleteTaskTemplate(id: number) {
 }
 
 export async function applyTaskTemplate(id: number, variables: TaskTemplateVariables[]) {
-  const response = await http.post<ApiEnvelope<TaskTemplateApplyResult[]>>(`/task-templates/${id}/apply`, { variables })
+  const response = await http.post<ApiEnvelope<TaskTemplateApplyResult[]>>(
+    `/task-templates/${id}/apply`,
+    { variables },
+  )
   return unwrapApiEnvelope(response.data)
 }

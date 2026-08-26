@@ -27,6 +27,7 @@ func TestGoogleDriveOAuthServiceStartAndComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("database.Open returned error: %v", err)
 	}
+	closeTestDatabase(t, db)
 	sessions := repository.NewOAuthSessionRepository(db)
 	service := NewGoogleDriveOAuthService(sessions, codec.New("encryption-secret"))
 	service.now = func() time.Time { return time.Date(2026, 3, 7, 0, 0, 0, 0, time.UTC) }

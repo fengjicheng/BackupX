@@ -46,9 +46,7 @@ func (h *HealthHandler) Ready(c *gin.Context) {
 			checks["database"] = "error: " + err.Error()
 			overallOK = false
 		} else {
-			ctx, cancel := c.Request.Context(), func() {}
-			_ = cancel
-			if err := sqlDB.PingContext(ctx); err != nil {
+			if err := sqlDB.PingContext(c.Request.Context()); err != nil {
 				checks["database"] = "ping failed: " + err.Error()
 				overallOK = false
 			} else {

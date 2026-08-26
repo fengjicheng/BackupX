@@ -43,12 +43,14 @@ func (r *PostgreSQLRunner) Run(ctx context.Context, task TaskSpec, writer LogWri
 	}
 	writer.WriteLine(fmt.Sprintf("连接到 PostgreSQL: %s:%d", task.Database.Host, task.Database.Port))
 	writer.WriteLine(fmt.Sprintf("备份数据库: %s", strings.Join(dbNames, ", ")))
-	stderrWriter := newLogLineWriter(writer, "pg_dump")
 	for index, name := range dbNames {
 		args := []string{"--clean", "--if-exists", "--create", "--format=plain", "-h", task.Database.Host, "-p", strconv.Itoa(task.Database.Port), "-U", task.Database.User, "--dbname", name}
 		writer.WriteLine(fmt.Sprintf("开始导出数据库 [%d/%d]: %s", index+1, len(dbNames), name))
-		if err := r.executor.Run(ctx, "pg_dump", args, CommandOptions{Stdout: file, Stderr: stderrWriter, Env: append(os.Environ(), "PGPASSWORD="+task.Database.Password)}); err != nil {
-			return nil, fmt.Errorf("run pg_dump for %s: %w", name, err)
+		stderrWriter := newLogLineWriter(writer, "pg_dump")
+		runErr := r.executor.Run(ctx, "pg_dump", args, CommandOptions{Stdout: file, Stderr: stderrWriter, Env: append(os.Environ(), "PGPASSWORD="+task.Database.Password)})
+		stderrWriter.Flush()
+		if runErr != nil {
+			return nil, fmt.Errorf("run pg_dump for %s: %w", name, runErr)
 		}
 		writer.WriteLine(fmt.Sprintf("数据库 %s 导出完成", name))
 		if index < len(dbNames)-1 {

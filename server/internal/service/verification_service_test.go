@@ -11,6 +11,7 @@ import (
 	"backupx/server/internal/backup"
 	"backupx/server/internal/config"
 	"backupx/server/internal/database"
+	"backupx/server/internal/lifecycle"
 	"backupx/server/internal/logger"
 	"backupx/server/internal/model"
 	"backupx/server/internal/repository"
@@ -45,6 +46,11 @@ func newVerifyTestHarness(t *testing.T) *verifyTestHarness {
 	if err != nil {
 		t.Fatalf("database.Open: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	cipher := codec.NewConfigCipher("verify-secret")
 	targets := repository.NewStorageTargetRepository(db)
 	tasks := repository.NewBackupTaskRepository(db)
@@ -77,8 +83,9 @@ func (h *verifyTestHarness) runVerify(t *testing.T, backupRecordID uint) *Verifi
 	t.Helper()
 	ctx := context.Background()
 	done := make(chan struct{})
-	h.verify.async = func(job func()) {
-		go func() { job(); close(done) }()
+	h.verify.async = func(job func(context.Context)) bool {
+		go func() { job(context.Background()); close(done) }()
+		return true
 	}
 	detail, err := h.verify.Start(ctx, backupRecordID, "quick", "tester")
 	if err != nil {
@@ -94,6 +101,48 @@ func (h *verifyTestHarness) runVerify(t *testing.T, backupRecordID uint) *Verifi
 		t.Fatalf("verify Get: %v", err)
 	}
 	return final
+}
+
+func TestVerificationServiceSupervisorCancellationFinalizesRecord(t *testing.T) {
+	h := newVerifyTestHarness(t)
+	backupDetail, err := h.execution.RunTaskByIDSync(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("RunTaskByIDSync: %v", err)
+	}
+
+	supervisor := lifecycle.NewSupervisor(context.Background())
+	h.verify.SetBackgroundRunner(supervisor)
+	// Occupy the only available execution path before cancellation so the test
+	// deterministically exercises cancellation while queued.
+	for i := 0; i < cap(h.verify.semaphore); i++ {
+		h.verify.semaphore <- struct{}{}
+	}
+	detail, err := h.verify.Start(context.Background(), backupDetail.ID, model.VerificationModeQuick, "tester")
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := supervisor.Shutdown(waitCtx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	for i := 0; i < cap(h.verify.semaphore); i++ {
+		<-h.verify.semaphore
+	}
+
+	final, err := h.verify.Get(context.Background(), detail.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if final.Status != model.VerificationRecordStatusFailed {
+		t.Fatalf("status = %q, want failed", final.Status)
+	}
+	if final.CompletedAt == nil {
+		t.Fatal("canceled verification was not finalized")
+	}
+	if !strings.Contains(strings.ToLower(final.ErrorMessage), "canceled") {
+		t.Fatalf("error message = %q, want cancellation", final.ErrorMessage)
+	}
 }
 
 // TestVerificationService_Success 覆盖正常路径：对一个有效（gzip 压缩）的备份做验证应通过。

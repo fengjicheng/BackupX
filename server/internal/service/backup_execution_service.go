@@ -105,7 +105,7 @@ type BackupExecutionService struct {
 	agentDispatcher    AgentDispatcher
 	replicationHook    ReplicationTrigger
 	dependentsResolver DependentsResolver
-	async              func(func())
+	async              func(func(context.Context)) bool
 	now                func() time.Time
 	tempDir            string
 	semaphore          chan struct{}
@@ -125,6 +125,13 @@ type BackupExecutionService struct {
 // SetMetrics 注入 Prometheus 采集器。nil 时所有埋点退化为 no-op。
 func (s *BackupExecutionService) SetMetrics(m *metrics.Metrics) {
 	s.metrics = m
+}
+
+// SetBackgroundRunner binds local asynchronous executions to the application lifecycle.
+func (s *BackupExecutionService) SetBackgroundRunner(runner BackgroundRunner) {
+	if runner != nil {
+		s.async = runner.Go
+	}
 }
 
 // ReplicationTrigger 抽象备份成功后的副本派发（实现者：ReplicationService）。
@@ -194,14 +201,12 @@ func NewBackupExecutionService(
 		retention:       retention,
 		cipher:          cipher,
 		notifier:        notifier,
-		async: func(job func()) {
-			go job()
-		},
-		now:            func() time.Time { return time.Now().UTC() },
-		tempDir:        tempDir,
-		semaphore:      make(chan struct{}, maxConcurrent),
-		retries:        retries,
-		bandwidthLimit: bandwidthLimit,
+		async:           runDetached,
+		now:             func() time.Time { return time.Now().UTC() },
+		tempDir:         tempDir,
+		semaphore:       make(chan struct{}, maxConcurrent),
+		retries:         retries,
+		bandwidthLimit:  bandwidthLimit,
 	}
 }
 
@@ -257,62 +262,6 @@ func (s *BackupExecutionService) DownloadRecord(ctx context.Context, recordID ui
 		fileName = filepath.Base(record.StoragePath)
 	}
 	return &DownloadedArtifact{FileName: fileName, Reader: reader}, nil
-}
-
-func (s *BackupExecutionService) RestoreRecord(ctx context.Context, recordID uint) error {
-	record, provider, err := s.loadRecordProvider(ctx, recordID)
-	if err != nil {
-		return err
-	}
-	task, err := s.tasks.FindByID(ctx, record.TaskID)
-	if err != nil {
-		return apperror.Internal("BACKUP_TASK_GET_FAILED", "无法获取关联备份任务", err)
-	}
-	if task == nil {
-		return apperror.New(404, "BACKUP_TASK_NOT_FOUND", "关联的备份任务不存在，无法执行恢复", fmt.Errorf("backup task %d not found", record.TaskID))
-	}
-	if record.BackupKind == model.BackupKindRepository {
-		spec, specErr := s.buildTaskSpec(task, record.StartedAt)
-		if specErr != nil {
-			return specErr
-		}
-		if err := backup.NewRepositoryStore(s.cipher.Key()).Restore(ctx, provider, record.StoragePath, record.Checksum, spec, backup.NopLogWriter{}); err != nil {
-			return apperror.Internal("BACKUP_RECORD_RESTORE_FAILED", "从 CDC 仓库恢复备份失败", err)
-		}
-		return nil
-	}
-	tempDir, err := os.MkdirTemp("", "backupx-restore-*")
-	if err != nil {
-		return apperror.Internal("BACKUP_RECORD_RESTORE_FAILED", "无法创建恢复目录", err)
-	}
-	defer os.RemoveAll(tempDir)
-	artifactPath := filepath.Join(tempDir, filepath.Base(record.FileName))
-	if strings.TrimSpace(filepath.Base(record.FileName)) == "" {
-		artifactPath = filepath.Join(tempDir, filepath.Base(record.StoragePath))
-	}
-	reader, err := provider.Download(ctx, record.StoragePath)
-	if err != nil {
-		return apperror.Internal("BACKUP_RECORD_RESTORE_FAILED", "无法下载备份文件", err)
-	}
-	if err := writeReaderToFile(artifactPath, reader); err != nil {
-		return apperror.Internal("BACKUP_RECORD_RESTORE_FAILED", "无法写入恢复文件", err)
-	}
-	preparedPath, err := s.prepareArtifactForRestore(artifactPath)
-	if err != nil {
-		return apperror.Internal("BACKUP_RECORD_RESTORE_FAILED", "无法准备恢复文件", err)
-	}
-	spec, err := s.buildTaskSpec(task, record.StartedAt)
-	if err != nil {
-		return err
-	}
-	runner, err := s.runnerRegistry.Runner(spec.Type)
-	if err != nil {
-		return apperror.BadRequest("BACKUP_TASK_INVALID", "不支持的备份任务类型", err)
-	}
-	if err := runner.Restore(ctx, spec, preparedPath, backup.NopLogWriter{}); err != nil {
-		return apperror.Internal("BACKUP_RECORD_RESTORE_FAILED", "恢复备份失败", err)
-	}
-	return nil
 }
 
 func (s *BackupExecutionService) DeleteRecord(ctx context.Context, recordID uint) error {
@@ -504,6 +453,11 @@ func (s *BackupExecutionService) startTask(ctx context.Context, id uint, async b
 	task.LastRunAt = &startedAt
 	task.LastStatus = "running"
 	if err := s.tasks.Update(ctx, task); err != nil {
+		finalizeErr := s.finalizeRecord(ctx, &runTask, record.ID, startedAt, model.BackupRecordStatusFailed,
+			"无法更新任务状态: "+err.Error(), "", "", 0, "", "", primaryTargetID)
+		if finalizeErr != nil {
+			err = errors.Join(err, finalizeErr)
+		}
 		return nil, apperror.Internal("BACKUP_TASK_UPDATE_FAILED", "无法更新任务状态", err)
 	}
 	// 多节点路由：task.NodeID 指向远程节点时，把执行任务入队给 Agent；
@@ -512,8 +466,10 @@ func (s *BackupExecutionService) startTask(ctx context.Context, id uint, async b
 		// 节点离线 → 立即把刚创建的 running 记录标记 failed，返回明确错误
 		if remoteNode.Status != model.NodeStatusOnline {
 			offlineMsg := fmt.Sprintf("节点 %s 当前离线，无法执行备份任务", remoteNode.Name)
-			_ = s.finalizeRecord(ctx, &runTask, record.ID, startedAt, model.BackupRecordStatusFailed,
-				offlineMsg, "", "", 0, "", "", primaryTargetID)
+			if finalizeErr := s.finalizeRecord(ctx, &runTask, record.ID, startedAt, model.BackupRecordStatusFailed,
+				offlineMsg, "", "", 0, "", "", primaryTargetID); finalizeErr != nil {
+				return nil, apperror.Internal("BACKUP_RECORD_FINALIZE_FAILED", "无法写回备份失败状态", finalizeErr)
+			}
 			return nil, apperror.BadRequest("NODE_OFFLINE", offlineMsg, nil)
 		}
 		if _, enqueueErr := s.agentDispatcher.EnqueueCommand(ctx, resolvedNodeID, model.AgentCommandTypeRunTask, map[string]any{
@@ -521,19 +477,28 @@ func (s *BackupExecutionService) startTask(ctx context.Context, id uint, async b
 			"recordId": record.ID,
 		}); enqueueErr != nil {
 			// 入队失败 → 在记录中标记失败，继续返回详情
-			_ = s.finalizeRecord(ctx, &runTask, record.ID, startedAt, model.BackupRecordStatusFailed,
-				"无法下发任务到远程节点: "+enqueueErr.Error(), "", "", 0, "", "", primaryTargetID)
+			if finalizeErr := s.finalizeRecord(ctx, &runTask, record.ID, startedAt, model.BackupRecordStatusFailed,
+				"无法下发任务到远程节点: "+enqueueErr.Error(), "", "", 0, "", "", primaryTargetID); finalizeErr != nil {
+				enqueueErr = errors.Join(enqueueErr, finalizeErr)
+			}
 			return nil, apperror.Internal("AGENT_COMMAND_ENQUEUE_FAILED", "无法下发任务到远程节点", enqueueErr)
 		}
 		return s.getRecordDetail(ctx, record.ID)
 	}
-	run := func() {
-		s.executeTask(context.Background(), &runTask, record.ID, startedAt)
+	run := func(runCtx context.Context) {
+		s.executeTask(runCtx, &runTask, record.ID, startedAt)
 	}
 	if async {
-		s.async(run)
+		if !s.async(run) {
+			message := "服务正在关闭，备份任务未启动"
+			if finalizeErr := s.finalizeRecord(ctx, &runTask, record.ID, startedAt, model.BackupRecordStatusFailed,
+				message, "", "", 0, "", "", primaryTargetID); finalizeErr != nil {
+				return nil, apperror.Internal("BACKUP_RECORD_FINALIZE_FAILED", "无法写回备份失败状态", finalizeErr)
+			}
+			return nil, backgroundTaskUnavailable("BACKUP_SERVICE_SHUTTING_DOWN")
+		}
 	} else {
-		run()
+		run(ctx)
 	}
 	return s.getRecordDetail(ctx, record.ID)
 }
@@ -844,20 +809,23 @@ func (s *BackupExecutionService) executeRepositoryTask(ctx context.Context, task
 		logger.Warnf("部分存储目标 CDC 仓库同步失败：%s", strings.Join(failures, "; "))
 	}
 	if s.dependentsResolver != nil {
-		go func(upstreamID uint, upstreamName string) {
-			dependents, resolveErr := s.dependentsResolver.TriggerDependents(context.Background(), upstreamID)
+		accepted := s.async(func(runCtx context.Context) {
+			dependents, resolveErr := s.dependentsResolver.TriggerDependents(runCtx, task.ID)
 			if resolveErr != nil {
-				logger.Warnf("解析任务 %s 的下游依赖失败：%v", upstreamName, resolveErr)
+				logger.Warnf("解析任务 %s 的下游依赖失败：%v", task.Name, resolveErr)
 				return
 			}
 			for _, dependentID := range dependents {
-				if _, runErr := s.RunTaskByID(context.Background(), dependentID); runErr != nil {
-					logger.Warnf("触发下游任务 #%d 失败（上游: %s）：%v", dependentID, upstreamName, runErr)
+				if _, runErr := s.RunTaskByID(runCtx, dependentID); runErr != nil {
+					logger.Warnf("触发下游任务 #%d 失败（上游: %s）：%v", dependentID, task.Name, runErr)
 				} else {
-					logger.Infof("已触发下游任务 #%d（上游: %s）", dependentID, upstreamName)
+					logger.Infof("已触发下游任务 #%d（上游: %s）", dependentID, task.Name)
 				}
 			}
-		}(task.ID, task.Name)
+		})
+		if !accepted {
+			logger.Warnf("服务正在关闭，跳过触发任务 %s 的下游依赖", task.Name)
+		}
 	}
 	return result, nil
 }
@@ -871,20 +839,6 @@ func (s *BackupExecutionService) acquireRepositoryLock(targetID uint) func() {
 }
 
 func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.BackupTask, recordID uint, startedAt time.Time) {
-	// 节点级并发限流：当任务绑定节点且节点配置了 MaxConcurrent>0，
-	// 该节点上所有任务共享一个节点专属 semaphore，互相排队
-	nodeSem := s.acquireNodeSemaphore(ctx, task.NodeID)
-	if nodeSem != nil {
-		nodeSem <- struct{}{}
-		defer func() { <-nodeSem }()
-	}
-	s.semaphore <- struct{}{}
-	defer func() { <-s.semaphore }()
-
-	// Prometheus: running gauge + 完成时 observe 耗时/字节/状态
-	s.metrics.IncTaskRunning()
-	defer s.metrics.DecTaskRunning()
-
 	logger := backup.NewExecutionLogger(recordID, s.logHub)
 	status := "failed"
 	errMessage := ""
@@ -900,8 +854,10 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 	var manifestJSON string
 	var repositoryProviders map[uint]storage.StorageProvider
 	completeRecord := func() {
+		persistCtx, cancel := finalizationContext(ctx)
+		defer cancel()
 		readyForRepositoryRetention := status == model.BackupRecordStatusSuccess
-		if finalizeErr := s.finalizeRecord(ctx, task, recordID, startedAt, status, errMessage, logger.String(), fileName, fileSize, checksum, storagePath, selectedStorageTargetID); finalizeErr != nil {
+		if finalizeErr := s.finalizeRecord(persistCtx, task, recordID, startedAt, status, errMessage, logger.String(), fileName, fileSize, checksum, storagePath, selectedStorageTargetID); finalizeErr != nil {
 			logger.Errorf("写回备份记录失败：%v", finalizeErr)
 			readyForRepositoryRetention = false
 		}
@@ -913,7 +869,7 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 			if marshalErr != nil {
 				logger.Warnf("序列化多目标上传结果失败：%v", marshalErr)
 				readyForRepositoryRetention = false
-			} else if record, findErr := s.records.FindByID(ctx, recordID); findErr != nil || record == nil {
+			} else if record, findErr := s.records.FindByID(persistCtx, recordID); findErr != nil || record == nil {
 				if findErr != nil {
 					logger.Warnf("读取备份记录以写回多目标结果失败：%v", findErr)
 				} else {
@@ -922,7 +878,7 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 				readyForRepositoryRetention = false
 			} else {
 				record.StorageUploadResults = string(resultsJSON)
-				if updateErr := s.records.Update(ctx, record); updateErr != nil {
+				if updateErr := s.records.Update(persistCtx, record); updateErr != nil {
 					logger.Warnf("写回多目标上传结果失败：%v", updateErr)
 					readyForRepositoryRetention = false
 				}
@@ -930,11 +886,11 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 		}
 		// 持久化差异链信息：全量记录其清单（供后续差异比对），差异记录其基线全量 ID。
 		if status == model.BackupRecordStatusSuccess && (backupKind != model.BackupKindFull || baseRecordID != 0 || manifestJSON != "") {
-			if record, findErr := s.records.FindByID(ctx, recordID); findErr == nil && record != nil {
+			if record, findErr := s.records.FindByID(persistCtx, recordID); findErr == nil && record != nil {
 				record.BackupKind = backupKind
 				record.BaseRecordID = baseRecordID
 				record.Manifest = manifestJSON
-				if updErr := s.records.Update(ctx, record); updErr != nil {
+				if updErr := s.records.Update(persistCtx, record); updErr != nil {
 					logger.Warnf("写回差异链信息失败：%v", updErr)
 					readyForRepositoryRetention = false
 				}
@@ -947,7 +903,7 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 				readyForRepositoryRetention = false
 			}
 		}
-		if readyForRepositoryRetention && backupKind == model.BackupKindRepository && s.retention != nil && len(repositoryProviders) > 0 {
+		if ctx.Err() == nil && readyForRepositoryRetention && backupKind == model.BackupKindRepository && s.retention != nil && len(repositoryProviders) > 0 {
 			targetIDs := make([]uint, 0, len(repositoryProviders))
 			for targetID := range repositoryProviders {
 				targetIDs = append(targetIDs, targetID)
@@ -969,8 +925,8 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 				}
 			}
 		}
-		if s.shouldNotify(ctx, task, status) {
-			if err := s.notifier.NotifyBackupResult(ctx, BackupExecutionNotification{Task: task, Record: &model.BackupRecord{ID: recordID, TaskID: task.ID, Status: status, FileName: fileName, FileSize: fileSize, StoragePath: storagePath, ErrorMessage: errMessage, StartedAt: startedAt}, Error: buildOptionalError(errMessage)}); err != nil {
+		if s.shouldNotify(persistCtx, task, status) {
+			if err := s.notifier.NotifyBackupResult(persistCtx, BackupExecutionNotification{Task: task, Record: &model.BackupRecord{ID: recordID, TaskID: task.ID, Status: status, FileName: fileName, FileSize: fileSize, StoragePath: storagePath, ErrorMessage: errMessage, StartedAt: startedAt}, Error: buildOptionalError(errMessage)}); err != nil {
 				logger.Warnf("发送备份通知失败：%v", err)
 			}
 		} else {
@@ -979,6 +935,28 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 		s.logHub.Complete(recordID, status)
 	}
 	defer completeRecord()
+
+	// 节点级并发限流：当任务绑定节点且节点配置了 MaxConcurrent>0，
+	// 该节点上所有任务共享一个节点专属 semaphore，互相排队。
+	nodeSem := s.acquireNodeSemaphore(ctx, task.NodeID)
+	if nodeSem != nil {
+		if !acquireBackgroundSlot(ctx, nodeSem) {
+			errMessage = ctx.Err().Error()
+			logger.Warnf("等待节点执行槽时任务被取消：%v", ctx.Err())
+			return
+		}
+		defer func() { <-nodeSem }()
+	}
+	if !acquireBackgroundSlot(ctx, s.semaphore) {
+		errMessage = ctx.Err().Error()
+		logger.Warnf("等待全局执行槽时任务被取消：%v", ctx.Err())
+		return
+	}
+	defer func() { <-s.semaphore }()
+
+	// Prometheus: running gauge + 完成时 observe 耗时/字节/状态
+	s.metrics.IncTaskRunning()
+	defer s.metrics.DecTaskRunning()
 
 	spec, err := s.buildTaskSpec(task, startedAt)
 	if err != nil {
@@ -1217,20 +1195,24 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 		// 自动派发复制（3-2-1）：任务配置 ReplicationTargetIDs 且本次有任意目标成功时生效
 		// 触发下游依赖任务（best-effort，失败仅 warn）
 		if s.dependentsResolver != nil {
-			go func(upstreamID uint, upstreamName string) {
-				dependents, err := s.dependentsResolver.TriggerDependents(context.Background(), upstreamID)
+			accepted := s.async(func(runCtx context.Context) {
+				dependents, err := s.dependentsResolver.TriggerDependents(runCtx, task.ID)
 				if err != nil {
+					logger.Warnf("解析任务 %s 的下游依赖失败：%v", task.Name, err)
 					return
 				}
 				for _, depID := range dependents {
-					_, runErr := s.RunTaskByID(context.Background(), depID)
+					_, runErr := s.RunTaskByID(runCtx, depID)
 					if runErr != nil {
-						logger.Warnf("触发下游任务 #%d 失败（上游: %s）: %v", depID, upstreamName, runErr)
+						logger.Warnf("触发下游任务 #%d 失败（上游: %s）: %v", depID, task.Name, runErr)
 					} else {
-						logger.Infof("已触发下游任务 #%d（上游: %s）", depID, upstreamName)
+						logger.Infof("已触发下游任务 #%d（上游: %s）", depID, task.Name)
 					}
 				}
-			}(task.ID, task.Name)
+			})
+			if !accepted {
+				logger.Warnf("服务正在关闭，跳过触发任务 %s 的下游依赖", task.Name)
+			}
 		}
 		if s.replicationHook != nil && strings.TrimSpace(task.ReplicationTargetIDs) != "" {
 			record := &model.BackupRecord{
@@ -1253,7 +1235,7 @@ func (s *BackupExecutionService) executeTask(ctx context.Context, task *model.Ba
 				}
 			}
 			logger.Infof("触发自动复制（3-2-1 规则）：%s", task.ReplicationTargetIDs)
-			s.replicationHook.TriggerAutoReplication(context.Background(), task, record)
+			s.replicationHook.TriggerAutoReplication(ctx, task, record)
 		}
 	} else {
 		errMessage = strings.Join(failedMessages, "; ")
@@ -1356,28 +1338,6 @@ func applyHANAExtraConfig(spec *backup.DatabaseSpec, extra map[string]any) {
 	}
 }
 
-func (s *BackupExecutionService) loadRecordProvider(ctx context.Context, recordID uint) (*model.BackupRecord, storage.StorageProvider, error) {
-	record, err := s.records.FindByID(ctx, recordID)
-	if err != nil {
-		return nil, nil, apperror.Internal("BACKUP_RECORD_GET_FAILED", "无法获取备份记录详情", err)
-	}
-	if record == nil {
-		return nil, nil, apperror.New(404, "BACKUP_RECORD_NOT_FOUND", "备份记录不存在", fmt.Errorf("backup record %d not found", recordID))
-	}
-	if err := s.validateClusterAccessible(ctx, record); err != nil {
-		return nil, nil, err
-	}
-	provider, err := s.resolveProvider(ctx, record.StorageTargetID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return record, provider, nil
-}
-
-func (s *BackupExecutionService) prepareArtifactForRestore(artifactPath string) (string, error) {
-	return prepareBackupArtifact(s.cipher, artifactPath, nil)
-}
-
 func (s *BackupExecutionService) getRecordDetail(ctx context.Context, recordID uint) (*BackupRecordDetail, error) {
 	record, err := s.records.FindByID(ctx, recordID)
 	if err != nil {
@@ -1408,25 +1368,6 @@ func buildOptionalError(message string) error {
 		return nil
 	}
 	return fmt.Errorf("%s", message)
-}
-
-func buildStorageProviderFromRepos(ctx context.Context, storageTargetID uint, storageTargets repository.StorageTargetRepository, storageRegistry *storage.Registry, cipher *codec.ConfigCipher) (storage.StorageProvider, *model.StorageTarget, error) {
-	target, err := storageTargets.FindByID(ctx, storageTargetID)
-	if err != nil {
-		return nil, nil, apperror.Internal("BACKUP_STORAGE_TARGET_LOOKUP_FAILED", "无法读取存储目标", err)
-	}
-	if target == nil {
-		return nil, nil, apperror.BadRequest("BACKUP_STORAGE_TARGET_INVALID", "存储目标不存在", nil)
-	}
-	var configMap map[string]any
-	if err := cipher.DecryptJSON(target.ConfigCiphertext, &configMap); err != nil {
-		return nil, nil, apperror.Internal("BACKUP_STORAGE_TARGET_DECRYPT_FAILED", "无法解密存储目标配置", err)
-	}
-	provider, err := storageRegistry.Create(ctx, storage.ParseProviderType(target.Type), configMap)
-	if err != nil {
-		return nil, nil, err
-	}
-	return provider, target, nil
 }
 
 // hashingReader 在上传过程中同步计算字节数和 SHA-256，零额外 I/O

@@ -80,18 +80,24 @@ export function TaskDependencyGraph({ tasks }: Props) {
   if (!hasAny) {
     return (
       <Card>
-        <Empty description={
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            暂无任务依赖关系。可在任务表单的"任务依赖"中配置上游任务，形成自动化工作流。
-          </Typography.Paragraph>
-        } />
+        <Empty
+          description={
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+              暂无任务依赖关系。可在任务表单的"任务依赖"中配置上游任务，形成自动化工作流。
+            </Typography.Paragraph>
+          }
+        />
       </Card>
     )
   }
 
   return (
     <Card title="任务依赖图">
-      <Alert type="info" content="节点颜色按最近执行状态：绿=成功 / 红=失败 / 蓝=执行中 / 灰=未运行。箭头方向 = 上游 → 下游。" style={{ marginBottom: 12 }} />
+      <Alert
+        type="info"
+        content="节点颜色按最近执行状态：绿=成功 / 红=失败 / 蓝=执行中 / 灰=未运行。箭头方向 = 上游 → 下游。"
+        style={{ marginBottom: 12 }}
+      />
       <ReactEChartsCore echarts={echarts} option={option} style={{ height: 420 }} />
     </Card>
   )

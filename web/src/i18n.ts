@@ -14,7 +14,9 @@ export function normalizeLanguage(value?: string | null): SupportedLanguage {
   return value?.toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN'
 }
 
-const savedLanguage = normalizeLanguage(typeof window === 'undefined' ? null : window.localStorage.getItem('backupx-language'))
+const savedLanguage = normalizeLanguage(
+  typeof window === 'undefined' ? null : window.localStorage.getItem('backupx-language'),
+)
 
 if (typeof document !== 'undefined') {
   document.documentElement.lang = savedLanguage

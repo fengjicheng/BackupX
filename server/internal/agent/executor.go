@@ -17,6 +17,7 @@ import (
 	"backupx/server/internal/storage"
 	storageRclone "backupx/server/internal/storage/rclone"
 	"backupx/server/pkg/compress"
+	"go.uber.org/zap"
 )
 
 // Executor 负责在 Agent 本地执行命令。
@@ -25,35 +26,26 @@ type Executor struct {
 	tempDir         string
 	backupRegistry  *backup.Registry
 	storageRegistry *storage.Registry
+	logger          *zap.Logger
 }
 
 // NewExecutor 构造执行器。预先初始化 backup runner 与 storage registry。
 func NewExecutor(client *MasterClient, tempDir string) *Executor {
-	backupRegistry := backup.NewRegistry(
-		backup.NewFileRunner(),
-		backup.NewSQLiteRunner(),
-		backup.NewMySQLRunner(nil),
-		backup.NewPostgreSQLRunner(nil),
-		backup.NewSAPHANARunner(nil),
-		backup.NewMongoDBRunner(nil),
-	)
-	storageRegistry := storage.NewRegistry(
-		storageRclone.NewLocalDiskFactory(),
-		storageRclone.NewS3Factory(),
-		storageRclone.NewWebDAVFactory(),
-		storageRclone.NewGoogleDriveFactory(),
-		storageRclone.NewAliyunOSSFactory(),
-		storageRclone.NewTencentCOSFactory(),
-		storageRclone.NewQiniuKodoFactory(),
-		storageRclone.NewFTPFactory(),
-		storageRclone.NewRcloneFactory(),
-	)
-	storageRclone.RegisterAllBackends(storageRegistry)
+	backupRegistry := backup.NewDefaultRegistry()
+	storageRegistry := storageRclone.NewDefaultRegistry()
 	return &Executor{
 		client:          client,
 		tempDir:         tempDir,
 		backupRegistry:  backupRegistry,
 		storageRegistry: storageRegistry,
+		logger:          zap.NewNop(),
+	}
+}
+
+// SetLogger attaches the Agent process logger to execution and reporting paths.
+func (e *Executor) SetLogger(logger *zap.Logger) {
+	if logger != nil {
+		e.logger = logger
 	}
 }
 
@@ -90,7 +82,7 @@ func (e *Executor) ExecuteRunTask(ctx context.Context, taskID, recordID uint) er
 	}
 
 	// 3) 运行 runner
-	logger := newRecordLogger(ctx, e.client, recordID)
+	logger := newRecordLogger(ctx, e.client, e.logger, recordID)
 	result, err := runner.Run(ctx, backupSpec, logger)
 	if err != nil {
 		e.reportRecordFailure(ctx, recordID, err.Error())
@@ -177,7 +169,9 @@ func (e *Executor) ExecuteRunTask(ctx context.Context, taskID, recordID uint) er
 	}
 
 	// 6) 上报最终成功
-	return e.client.UpdateRecord(ctx, recordID, RecordUpdate{
+	reportCtx, cancel := agentFinalizationContext(ctx)
+	defer cancel()
+	if err := e.client.UpdateRecord(reportCtx, recordID, RecordUpdate{
 		Status:               "success",
 		FileName:             fileName,
 		FileSize:             fileSize,
@@ -187,7 +181,10 @@ func (e *Executor) ExecuteRunTask(ctx context.Context, taskID, recordID uint) er
 		StorageTransferMode:  selectedStorageTransferMode,
 		StorageUploadResults: uploadResults,
 		LogAppend:            fmt.Sprintf("[agent] 任务完成，总计 %d 字节\n", fileSize),
-	})
+	}); err != nil {
+		return fmt.Errorf("report backup success to master: %w", err)
+	}
+	return nil
 }
 
 // uploadToTarget 上传单个目标。为保持简化不做上传级重试（rclone 本身已有 low-level 重试）。
@@ -222,7 +219,11 @@ func (e *Executor) uploadToTarget(ctx context.Context, recordID uint, target Sto
 
 // appendLog 追加日志到 Master 记录（尽力而为，失败不中断主流程）
 func (e *Executor) appendLog(ctx context.Context, recordID uint, line string) {
-	_ = e.client.UpdateRecord(ctx, recordID, RecordUpdate{LogAppend: line})
+	if err := e.client.UpdateRecord(ctx, recordID, RecordUpdate{LogAppend: line}); err != nil {
+		e.logger.Warn("append backup record log to master failed",
+			zap.Uint("record_id", recordID),
+			zap.Error(err))
+	}
 }
 
 // reportRecordFailure 上报失败状态
@@ -231,12 +232,27 @@ func (e *Executor) reportRecordFailure(ctx context.Context, recordID uint, msg s
 }
 
 func (e *Executor) reportRecordFailureWithUploadResults(ctx context.Context, recordID uint, msg string, uploadResults []StorageResultItem) {
-	_ = e.client.UpdateRecord(ctx, recordID, RecordUpdate{
+	reportCtx, cancel := agentFinalizationContext(ctx)
+	defer cancel()
+	if err := e.client.UpdateRecord(reportCtx, recordID, RecordUpdate{
 		Status:               "failed",
 		ErrorMessage:         msg,
 		StorageUploadResults: uploadResults,
 		LogAppend:            fmt.Sprintf("[agent] 错误: %s\n", msg),
-	})
+	}); err != nil {
+		e.logger.Error("report backup failure to master failed",
+			zap.Uint("record_id", recordID),
+			zap.Error(err))
+	}
+}
+
+// agentFinalizationContext lets terminal state reach the Master even when the
+// command context was canceled, while bounding shutdown/network delays.
+func agentFinalizationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }
 
 // buildBackupTaskSpec 把 AgentTaskSpec 转换为 backup.TaskSpec。
@@ -301,30 +317,40 @@ func compactStringList(items []string) []string {
 type recordLogger struct {
 	ctx      context.Context
 	client   *MasterClient
+	logger   *zap.Logger
 	recordID uint
 }
 
-func newRecordLogger(ctx context.Context, client *MasterClient, recordID uint) *recordLogger {
-	return &recordLogger{ctx: ctx, client: client, recordID: recordID}
+func newRecordLogger(ctx context.Context, client *MasterClient, logger *zap.Logger, recordID uint) *recordLogger {
+	return &recordLogger{ctx: ctx, client: client, logger: logger, recordID: recordID}
 }
 
 func (l *recordLogger) WriteLine(message string) {
-	_ = l.client.UpdateRecord(l.ctx, l.recordID, RecordUpdate{LogAppend: message + "\n"})
+	if err := l.client.UpdateRecord(l.ctx, l.recordID, RecordUpdate{LogAppend: message + "\n"}); err != nil {
+		l.logger.Warn("append backup runner log to master failed",
+			zap.Uint("record_id", l.recordID),
+			zap.Error(err))
+	}
 }
 
 // restoreLogger 把 runner 日志回传到 Master 恢复记录。
 type restoreLogger struct {
 	ctx       context.Context
 	client    *MasterClient
+	logger    *zap.Logger
 	restoreID uint
 }
 
-func newRestoreLogger(ctx context.Context, client *MasterClient, restoreID uint) *restoreLogger {
-	return &restoreLogger{ctx: ctx, client: client, restoreID: restoreID}
+func newRestoreLogger(ctx context.Context, client *MasterClient, logger *zap.Logger, restoreID uint) *restoreLogger {
+	return &restoreLogger{ctx: ctx, client: client, logger: logger, restoreID: restoreID}
 }
 
 func (l *restoreLogger) WriteLine(message string) {
-	_ = l.client.UpdateRestore(l.ctx, l.restoreID, RestoreUpdate{LogAppend: message + "\n"})
+	if err := l.client.UpdateRestore(l.ctx, l.restoreID, RestoreUpdate{LogAppend: message + "\n"}); err != nil {
+		l.logger.Warn("append restore runner log to master failed",
+			zap.Uint("restore_record_id", l.restoreID),
+			zap.Error(err))
+	}
 }
 
 // DeleteStorageObject 在 Agent 本机上删除指定存储对象（供跨节点清理调用）。
@@ -453,29 +479,44 @@ func (e *Executor) ExecuteRestore(ctx context.Context, restoreRecordID uint) err
 		e.reportRestoreFailure(ctx, restoreRecordID, fmt.Sprintf("不支持的备份类型: %v", err))
 		return err
 	}
-	logger := newRestoreLogger(ctx, e.client, restoreRecordID)
+	logger := newRestoreLogger(ctx, e.client, e.logger, restoreRecordID)
 	if err := runner.Restore(ctx, taskSpec, preparedPath, logger); err != nil {
 		e.reportRestoreFailure(ctx, restoreRecordID, err.Error())
 		return err
 	}
 
 	// 5) 上报成功
-	return e.client.UpdateRestore(ctx, restoreRecordID, RestoreUpdate{
+	reportCtx, cancel := agentFinalizationContext(ctx)
+	defer cancel()
+	if err := e.client.UpdateRestore(reportCtx, restoreRecordID, RestoreUpdate{
 		Status:    "success",
 		LogAppend: "[agent] 恢复执行完成\n",
-	})
+	}); err != nil {
+		return fmt.Errorf("report restore success to master: %w", err)
+	}
+	return nil
 }
 
 func (e *Executor) appendRestoreLog(ctx context.Context, restoreID uint, line string) {
-	_ = e.client.UpdateRestore(ctx, restoreID, RestoreUpdate{LogAppend: line})
+	if err := e.client.UpdateRestore(ctx, restoreID, RestoreUpdate{LogAppend: line}); err != nil {
+		e.logger.Warn("append restore log to master failed",
+			zap.Uint("restore_record_id", restoreID),
+			zap.Error(err))
+	}
 }
 
 func (e *Executor) reportRestoreFailure(ctx context.Context, restoreID uint, msg string) {
-	_ = e.client.UpdateRestore(ctx, restoreID, RestoreUpdate{
+	reportCtx, cancel := agentFinalizationContext(ctx)
+	defer cancel()
+	if err := e.client.UpdateRestore(reportCtx, restoreID, RestoreUpdate{
 		Status:       "failed",
 		ErrorMessage: msg,
 		LogAppend:    fmt.Sprintf("[agent] 错误: %s\n", msg),
-	})
+	}); err != nil {
+		e.logger.Error("report restore failure to master failed",
+			zap.Uint("restore_record_id", restoreID),
+			zap.Error(err))
+	}
 }
 
 // buildRestoreBackupTaskSpec 把 RestoreSpec 转成 backup.TaskSpec。

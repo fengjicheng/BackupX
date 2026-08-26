@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"runtime"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"backupx/server/internal/backup"
+	"go.uber.org/zap"
 )
 
 // Agent 是 Agent 进程的主控制器。
@@ -21,6 +21,7 @@ type Agent struct {
 	client   *MasterClient
 	executor *Executor
 	version  string
+	logger   *zap.Logger
 
 	mu      sync.Mutex
 	started bool
@@ -44,7 +45,18 @@ func New(cfg *Config, version string) (*Agent, error) {
 		client:   client,
 		executor: executor,
 		version:  version,
+		logger:   zap.NewNop(),
 	}, nil
+}
+
+// SetLogger attaches the process logger used by the Agent runtime loop.
+func (a *Agent) SetLogger(logger *zap.Logger) {
+	if logger != nil {
+		a.logger = logger
+		if a.executor != nil {
+			a.executor.SetLogger(logger)
+		}
+	}
 }
 
 // Run 启动 Agent 主循环，阻塞直到 ctx 被取消。
@@ -64,7 +76,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	if err := a.heartbeatOnce(ctx); err != nil {
 		return fmt.Errorf("initial heartbeat failed: %w", err)
 	}
-	log.Printf("[agent] connected to master %s", a.cfg.Master)
+	a.logger.Info("agent connected to master", zap.String("master", a.cfg.Master))
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -90,14 +102,17 @@ func (a *Agent) heartbeatLoop(ctx context.Context, interval time.Duration) {
 			return
 		case <-ticker.C:
 			if err := a.heartbeatOnce(ctx); err != nil {
-				log.Printf("[agent] heartbeat failed: %v", err)
+				a.logger.Warn("agent heartbeat failed", zap.Error(err))
 			}
 		}
 	}
 }
 
 func (a *Agent) heartbeatOnce(ctx context.Context) error {
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		a.logger.Warn("resolve agent hostname failed", zap.Error(err))
+	}
 	req := HeartbeatRequest{
 		Hostname:     hostname,
 		IPAddress:    detectLocalIP(),
@@ -105,7 +120,7 @@ func (a *Agent) heartbeatOnce(ctx context.Context) error {
 		OS:           runtime.GOOS,
 		Arch:         runtime.GOARCH,
 	}
-	_, err := a.client.Heartbeat(ctx, req)
+	_, err = a.client.Heartbeat(ctx, req)
 	return err
 }
 
@@ -126,13 +141,13 @@ func (a *Agent) pollLoop(ctx context.Context, interval time.Duration) {
 func (a *Agent) pollAndHandleOnce(ctx context.Context) {
 	cmd, err := a.client.PollCommand(ctx)
 	if err != nil {
-		log.Printf("[agent] poll command failed: %v", err)
+		a.logger.Warn("poll agent command failed", zap.Error(err))
 		return
 	}
 	if cmd == nil {
 		return
 	}
-	log.Printf("[agent] received command #%d type=%s", cmd.ID, cmd.Type)
+	a.logger.Info("agent command received", zap.Uint("command_id", cmd.ID), zap.String("command_type", cmd.Type))
 	switch cmd.Type {
 	case "run_task":
 		a.handleRunTask(ctx, cmd)
@@ -146,8 +161,8 @@ func (a *Agent) pollAndHandleOnce(ctx context.Context) {
 		a.handleDeleteStorageObject(ctx, cmd)
 	default:
 		msg := fmt.Sprintf("unknown command type: %s", cmd.Type)
-		log.Printf("[agent] %s", msg)
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, msg, nil)
+		a.logger.Warn("unknown agent command", zap.Uint("command_id", cmd.ID), zap.String("command_type", cmd.Type))
+		a.submitCommandResult(ctx, cmd.ID, false, msg, nil)
 	}
 }
 
@@ -158,14 +173,14 @@ func (a *Agent) handleRunTask(ctx context.Context, cmd *CommandPayload) {
 		RecordID uint `json:"recordId"`
 	}
 	if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
 		return
 	}
 	if err := a.executor.ExecuteRunTask(ctx, payload.TaskID, payload.RecordID); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
 		return
 	}
-	_ = a.client.SubmitCommandResult(ctx, cmd.ID, true, "", map[string]any{
+	a.submitCommandResult(ctx, cmd.ID, true, "", map[string]any{
 		"taskId":   payload.TaskID,
 		"recordId": payload.RecordID,
 	})
@@ -177,18 +192,18 @@ func (a *Agent) handleRestoreRecord(ctx context.Context, cmd *CommandPayload) {
 		RestoreRecordID uint `json:"restoreRecordId"`
 	}
 	if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
 		return
 	}
 	if payload.RestoreRecordID == 0 {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "restoreRecordId is required", nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "restoreRecordId is required", nil)
 		return
 	}
 	if err := a.executor.ExecuteRestore(ctx, payload.RestoreRecordID); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
 		return
 	}
-	_ = a.client.SubmitCommandResult(ctx, cmd.ID, true, "", map[string]any{
+	a.submitCommandResult(ctx, cmd.ID, true, "", map[string]any{
 		"restoreRecordId": payload.RestoreRecordID,
 	})
 }
@@ -202,23 +217,23 @@ func (a *Agent) handleDeleteStorageObject(ctx context.Context, cmd *CommandPaylo
 		StoragePath  string         `json:"storagePath"`
 	}
 	if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
 		return
 	}
 	if strings.TrimSpace(payload.StoragePath) == "" {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "storagePath is required", nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "storagePath is required", nil)
 		return
 	}
 	provider, err := a.executor.storageRegistry.Create(ctx, payload.TargetType, payload.TargetConfig)
 	if err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "create provider: "+err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "create provider: "+err.Error(), nil)
 		return
 	}
 	if err := provider.Delete(ctx, payload.StoragePath); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "delete object: "+err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "delete object: "+err.Error(), nil)
 		return
 	}
-	_ = a.client.SubmitCommandResult(ctx, cmd.ID, true, "", map[string]any{"deleted": true})
+	a.submitCommandResult(ctx, cmd.ID, true, "", map[string]any{"deleted": true})
 }
 
 // handleDiscoverDB 处理 discover_db 命令：在 Agent 本机执行 mysql/psql 列出数据库。
@@ -231,7 +246,7 @@ func (a *Agent) handleDiscoverDB(ctx context.Context, cmd *CommandPayload) {
 		Password string `json:"password"`
 	}
 	if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
 		return
 	}
 	databases, err := backup.DiscoverDatabases(ctx, backup.NewOSCommandExecutor(), backup.DiscoverRequest{
@@ -242,10 +257,10 @@ func (a *Agent) handleDiscoverDB(ctx context.Context, cmd *CommandPayload) {
 		Password: payload.Password,
 	})
 	if err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
 		return
 	}
-	_ = a.client.SubmitCommandResult(ctx, cmd.ID, true, "", map[string]any{"databases": databases})
+	a.submitCommandResult(ctx, cmd.ID, true, "", map[string]any{"databases": databases})
 }
 
 // handleListDir 处理 list_dir 命令（阶段四实现）
@@ -254,15 +269,44 @@ func (a *Agent) handleListDir(ctx context.Context, cmd *CommandPayload) {
 		Path string `json:"path"`
 	}
 	if err := json.Unmarshal(cmd.Payload, &payload); err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, "invalid payload: "+err.Error(), nil)
 		return
 	}
 	entries, err := listLocalDir(payload.Path)
 	if err != nil {
-		_ = a.client.SubmitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
+		a.submitCommandResult(ctx, cmd.ID, false, err.Error(), nil)
 		return
 	}
-	_ = a.client.SubmitCommandResult(ctx, cmd.ID, true, "", map[string]any{"entries": entries})
+	a.submitCommandResult(ctx, cmd.ID, true, "", map[string]any{"entries": entries})
+}
+
+func (a *Agent) submitCommandResult(ctx context.Context, commandID uint, success bool, message string, data any) {
+	reportCtx, cancel := agentFinalizationContext(ctx)
+	defer cancel()
+	var err error
+	attempts := 0
+retryLoop:
+	for attempts < 3 {
+		attempts++
+		err = a.client.SubmitCommandResult(reportCtx, commandID, success, message, data)
+		if err == nil {
+			return
+		}
+		if attempts < 3 {
+			timer := time.NewTimer(time.Duration(attempts) * 100 * time.Millisecond)
+			select {
+			case <-reportCtx.Done():
+				timer.Stop()
+				break retryLoop
+			case <-timer.C:
+			}
+		}
+	}
+	a.logger.Error("submit agent command result failed",
+		zap.Uint("command_id", commandID),
+		zap.Bool("success", success),
+		zap.Int("attempts", attempts),
+		zap.Error(err))
 }
 
 // 辅助函数

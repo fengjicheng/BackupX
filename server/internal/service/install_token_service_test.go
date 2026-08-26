@@ -22,6 +22,7 @@ func openInstallTokenTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
+	closeTestDatabase(t, db)
 	if err := db.AutoMigrate(&model.AgentInstallToken{}, &model.Node{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

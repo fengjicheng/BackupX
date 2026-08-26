@@ -20,7 +20,7 @@ type DirEntry struct {
 func listLocalDir(path string) ([]DirEntry, error) {
 	cleaned := filepath.Clean(strings.TrimSpace(path))
 	if strings.TrimSpace(path) == "" || cleaned == "." {
-		cleaned = "/"
+		cleaned = localFilesystemRoot()
 	}
 	entries, err := os.ReadDir(cleaned)
 	if err != nil {
@@ -47,4 +47,16 @@ func listLocalDir(path string) ([]DirEntry, error) {
 		return result[i].Name < result[j].Name
 	})
 	return result, nil
+}
+
+func localFilesystemRoot() string {
+	root := string(os.PathSeparator)
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return root
+	}
+	if volume := filepath.VolumeName(workingDir); volume != "" {
+		return volume + root
+	}
+	return root
 }

@@ -14,7 +14,10 @@ export interface AuditListParams {
 }
 
 export async function listAuditLogs(params: AuditListParams) {
-  const response = await http.get<{ code: string; message: string; data: AuditLogListResult }>('/audit-logs', { params })
+  const response = await http.get<{ code: string; message: string; data: AuditLogListResult }>(
+    '/audit-logs',
+    { params },
+  )
   return response.data.data
 }
 

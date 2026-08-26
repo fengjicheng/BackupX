@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Space, Spin, Typography } from '@arco-design/web-react'
 import axios from 'axios'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { completeGoogleDriveAuth } from '../../services/storage-targets'
 import type { GoogleDriveCallbackResult } from '../../types/storage-targets'
@@ -61,7 +61,15 @@ export function GoogleDriveCallbackPage() {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: 24 }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        padding: 24,
+      }}
+    >
       <Card style={{ maxWidth: 520, width: '100%' }}>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <div>
@@ -103,4 +111,3 @@ export function GoogleDriveCallbackPage() {
     </div>
   )
 }
-

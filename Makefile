@@ -51,7 +51,8 @@ verify: verify-server verify-web verify-docs
 
 verify-server: format-check vet-server test-server build-server
 
-verify-web: test-web build-web
+verify-web:
+	cd web && npm run lint && npm run format:check && npm run test && npm run build
 
 verify-docs: check-docs
 

@@ -66,10 +66,11 @@ export function BatchCommandTable({ rows, onRetryNode }: Props) {
         columns={[
           { title: '节点', dataIndex: 'nodeName', width: 140 },
           {
-            title: '状态', dataIndex: 'status', width: 90,
-            render: (status: BatchCommandRow['status']) => (
-              status === 'ready' ? <Tag color="green">可执行</Tag> : <Tag color="red">失败</Tag>
-            ),
+            title: '状态',
+            dataIndex: 'status',
+            width: 90,
+            render: (status: BatchCommandRow['status']) =>
+              status === 'ready' ? <Tag color="green">可执行</Tag> : <Tag color="red">失败</Tag>,
           },
           {
             title: '安装命令',
@@ -77,42 +78,66 @@ export function BatchCommandTable({ rows, onRetryNode }: Props) {
             render: (cmd: unknown, row: BatchCommandRow) => {
               const left = remaining[row.nodeId] ?? 0
               if (row.status === 'failed') {
-                return <Text type="error" style={{ fontSize: 12 }}>{row.errorMessage || '生成安装命令失败'}</Text>
+                return (
+                  <Text type="error" style={{ fontSize: 12 }}>
+                    {row.errorMessage || '生成安装命令失败'}
+                  </Text>
+                )
               }
               return (
-                <Text style={{
-                  fontSize: 12, wordBreak: 'break-all',
-                  opacity: left === 0 ? 0.4 : 1,
-                }}>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    wordBreak: 'break-all',
+                    opacity: left === 0 ? 0.4 : 1,
+                  }}
+                >
                   {cmd as string}
                 </Text>
               )
             },
           },
           {
-            title: '剩余', dataIndex: 'expiresAt', width: 90,
+            title: '剩余',
+            dataIndex: 'expiresAt',
+            width: 90,
             render: (_v: unknown, row: BatchCommandRow) => {
               const left = remaining[row.nodeId] ?? 0
               if (row.status === 'failed') {
-                return <Text type="secondary" style={{ fontSize: 12 }}>-</Text>
+                return (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    -
+                  </Text>
+                )
               }
               return (
                 <Text type={left === 0 ? 'secondary' : 'primary'} style={{ fontSize: 12 }}>
-                  {left === 0 ? '已过期' : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
+                  {left === 0
+                    ? '已过期'
+                    : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
                 </Text>
               )
             },
           },
           {
-            title: '操作', width: 110,
+            title: '操作',
+            width: 110,
             render: (_v: unknown, row: BatchCommandRow) => (
               <Space>
                 {row.status === 'ready' && (
-                  <Button size="small" icon={<IconCopy />} onClick={() => copy(row.command)}
-                    disabled={(remaining[row.nodeId] ?? 0) === 0}>复制</Button>
+                  <Button
+                    size="small"
+                    icon={<IconCopy />}
+                    onClick={() => copy(row.command)}
+                    disabled={(remaining[row.nodeId] ?? 0) === 0}
+                  >
+                    复制
+                  </Button>
                 )}
                 {row.status === 'failed' && onRetryNode && (
-                  <Button size="small" icon={<IconRefresh />} onClick={() => onRetryNode(row)}>重试</Button>
+                  <Button size="small" icon={<IconRefresh />} onClick={() => onRetryNode(row)}>
+                    重试
+                  </Button>
                 )}
               </Space>
             ),
@@ -123,8 +148,13 @@ export function BatchCommandTable({ rows, onRetryNode }: Props) {
       />
       <div style={{ marginTop: 12, textAlign: 'right' }}>
         <Space>
-          <Button icon={<IconDownload />} onClick={exportAll}
-            disabled={getExportableBatchRows(rows).length === 0}>导出 .sh</Button>
+          <Button
+            icon={<IconDownload />}
+            onClick={exportAll}
+            disabled={getExportableBatchRows(rows).length === 0}
+          >
+            导出 .sh
+          </Button>
         </Space>
       </div>
     </div>

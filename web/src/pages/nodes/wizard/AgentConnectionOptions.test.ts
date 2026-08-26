@@ -17,7 +17,9 @@ describe('validateAgentConnection', () => {
   })
 
   it('accepts an SSH local-forward URL and SOCKS5 proxy', () => {
-    expect(validateAgentConnection(connection({ agentMasterUrl: 'http://127.0.0.1:18340' }))).toBe('')
+    expect(validateAgentConnection(connection({ agentMasterUrl: 'http://127.0.0.1:18340' }))).toBe(
+      '',
+    )
     expect(validateAgentConnection(connection({ proxyUrl: 'socks5h://127.0.0.1:1080' }))).toBe('')
   })
 
@@ -27,8 +29,16 @@ describe('validateAgentConnection', () => {
   })
 
   it('rejects credentials and shell-unsafe values before submission', () => {
-    expect(validateAgentConnection(connection({ agentMasterUrl: 'https://user:pass@master.example.com' }))).not.toBe('')
-    expect(validateAgentConnection(connection({ proxyUrl: 'http://user:pass@proxy.example.com' }))).not.toBe('')
-    expect(validateAgentConnection(connection({ caCertFile: '/etc/pki/internal ca.pem' }))).not.toBe('')
+    expect(
+      validateAgentConnection(
+        connection({ agentMasterUrl: 'https://user:pass@master.example.com' }),
+      ),
+    ).not.toBe('')
+    expect(
+      validateAgentConnection(connection({ proxyUrl: 'http://user:pass@proxy.example.com' })),
+    ).not.toBe('')
+    expect(
+      validateAgentConnection(connection({ caCertFile: '/etc/pki/internal ca.pem' })),
+    ).not.toBe('')
   })
 })

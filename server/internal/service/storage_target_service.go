@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -95,6 +96,7 @@ type StorageTargetService struct {
 	records       repository.BackupRecordRepository
 	registry      *storage.Registry
 	cipher        *codec.ConfigCipher
+	background    BackgroundRunner
 }
 
 func NewStorageTargetService(
@@ -112,6 +114,10 @@ func (s *StorageTargetService) SetBackupTaskRepository(tasks repository.BackupTa
 
 func (s *StorageTargetService) SetBackupRecordRepository(records repository.BackupRecordRepository) {
 	s.records = records
+}
+
+func (s *StorageTargetService) SetBackgroundRunner(runner BackgroundRunner) {
+	s.background = runner
 }
 
 func (s *StorageTargetService) List(ctx context.Context) ([]StorageTargetSummary, error) {
@@ -254,7 +260,12 @@ func (s *StorageTargetService) TestConnection(ctx context.Context, input Storage
 		item.LastTestMessage = "连接成功"
 	}
 	if item.ID != 0 {
-		_ = s.targets.Update(ctx, item)
+		if updateErr := s.targets.Update(ctx, item); updateErr != nil {
+			if testErr != nil {
+				return apperror.BadRequest("STORAGE_TARGET_TEST_FAILED", sanitizeMessage(testErr.Error()), errors.Join(testErr, fmt.Errorf("save connection test result: %w", updateErr)))
+			}
+			return apperror.Internal("STORAGE_TARGET_TEST_RESULT_SAVE_FAILED", "连接成功，但无法保存测试结果", updateErr)
+		}
 	}
 	if testErr != nil {
 		return apperror.BadRequest("STORAGE_TARGET_TEST_FAILED", sanitizeMessage(testErr.Error()), testErr)
@@ -269,23 +280,23 @@ func (s *StorageTargetService) StartHealthMonitor(ctx context.Context, dispatche
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
-	ticker := time.NewTicker(interval)
 	// notified 跟踪已告警的目标，避免每轮重复
 	notified := map[uint]bool{}
 	capacityNotified := map[uint]bool{}
 	var mu sync.Mutex
-	go func() {
+	startBackgroundMonitor(s.background, ctx, func(runCtx context.Context) {
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				s.runHealthCheckOnce(ctx, dispatcher, &mu, notified)
-				s.runCapacityCheckOnce(ctx, dispatcher, &mu, capacityNotified)
+				s.runHealthCheckOnce(runCtx, dispatcher, &mu, notified)
+				s.runCapacityCheckOnce(runCtx, dispatcher, &mu, capacityNotified)
 			}
 		}
-	}()
+	})
 }
 
 // StorageCapacityWarningThreshold 存储使用率告警阈值（85%）。
@@ -371,7 +382,6 @@ func (s *StorageTargetService) runHealthCheckOnce(ctx context.Context, dispatche
 		if !target.Enabled {
 			continue
 		}
-		previousStatus := target.LastTestStatus
 		configMap := map[string]any{}
 		if err := s.cipher.DecryptJSON(target.ConfigCiphertext, &configMap); err != nil {
 			continue
@@ -380,13 +390,13 @@ func (s *StorageTargetService) runHealthCheckOnce(ctx context.Context, dispatche
 		now := time.Now().UTC()
 		if err != nil {
 			s.applyHealthResult(ctx, &target, now, false, err.Error())
-			s.notifyUnhealthyTransition(ctx, dispatcher, mu, notified, &target, previousStatus, err.Error())
+			s.notifyUnhealthyTransition(ctx, dispatcher, mu, notified, &target, err.Error())
 			continue
 		}
 		testErr := provider.TestConnection(ctx)
 		if testErr != nil {
 			s.applyHealthResult(ctx, &target, now, false, testErr.Error())
-			s.notifyUnhealthyTransition(ctx, dispatcher, mu, notified, &target, previousStatus, testErr.Error())
+			s.notifyUnhealthyTransition(ctx, dispatcher, mu, notified, &target, testErr.Error())
 			continue
 		}
 		s.applyHealthResult(ctx, &target, now, true, "连接成功")
@@ -408,7 +418,7 @@ func (s *StorageTargetService) applyHealthResult(ctx context.Context, target *mo
 	_ = s.targets.Update(ctx, target)
 }
 
-func (s *StorageTargetService) notifyUnhealthyTransition(ctx context.Context, dispatcher EventDispatcher, mu *sync.Mutex, notified map[uint]bool, target *model.StorageTarget, previousStatus string, message string) {
+func (s *StorageTargetService) notifyUnhealthyTransition(ctx context.Context, dispatcher EventDispatcher, mu *sync.Mutex, notified map[uint]bool, target *model.StorageTarget, message string) {
 	if dispatcher == nil {
 		return
 	}
@@ -423,7 +433,6 @@ func (s *StorageTargetService) notifyUnhealthyTransition(ctx context.Context, di
 	if already {
 		return
 	}
-	_ = previousStatus // 保留参数便于未来扩展：区分"从未测试"与"从 success 掉线"
 	title := "BackupX 存储目标连接失败"
 	body := fmt.Sprintf("存储目标：%s (类型: %s)\n错误：%s", target.Name, target.Type, message)
 	fields := map[string]any{
@@ -473,7 +482,9 @@ func (s *StorageTargetService) CompleteGoogleDriveOAuth(ctx context.Context, inp
 	// Mark used immediately to prevent duplicate requests (e.g. React StrictMode double invocation)
 	now := time.Now().UTC()
 	session.UsedAt = &now
-	_ = s.oauthSessions.Update(ctx, session)
+	if err := s.oauthSessions.Update(ctx, session); err != nil {
+		return nil, apperror.Internal("STORAGE_GOOGLE_OAUTH_SESSION_FAILED", "无法锁定 Google Drive 授权会话", err)
+	}
 
 	var draft googleDriveOAuthDraft
 	if err := s.cipher.DecryptJSON(session.PayloadCiphertext, &draft); err != nil {

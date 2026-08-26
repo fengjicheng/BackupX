@@ -47,6 +47,11 @@ func newReplicationTestHarness(t *testing.T) *replicationTestHarness {
 	if err != nil {
 		t.Fatalf("database.Open: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	cipher := codec.NewConfigCipher("replicate-secret")
 	targets := repository.NewStorageTargetRepository(db)
 	tasks := repository.NewBackupTaskRepository(db)
@@ -109,8 +114,9 @@ func TestReplicationService_MirrorsToDestTarget(t *testing.T) {
 	}
 
 	done := make(chan struct{})
-	h.repl.async = func(job func()) {
-		go func() { job(); close(done) }()
+	h.repl.async = func(job func(context.Context)) bool {
+		go func() { job(context.Background()); close(done) }()
+		return true
 	}
 	summary, err := h.repl.Start(ctx, backupDetail.ID, 2, "tester")
 	if err != nil {

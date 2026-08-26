@@ -180,7 +180,7 @@ func (s *TaskExportService) Import(ctx context.Context, payload ExportPayload) (
 		results = append(results, ImportResult{Name: t.Name, TaskID: detail.ID, Success: true})
 	}
 	// 第二阶段：依赖链接（上游任务名 → 新 ID）
-	for i, t := range payload.Tasks {
+	for _, t := range payload.Tasks {
 		if len(t.DependsOnTaskNames) == 0 {
 			continue
 		}
@@ -206,7 +206,6 @@ func (s *TaskExportService) Import(ctx context.Context, payload ExportPayload) (
 					break
 				}
 			}
-			_ = i
 		}
 	}
 	return results, nil

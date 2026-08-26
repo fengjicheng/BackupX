@@ -156,10 +156,6 @@ func (s *BackupRecordService) Download(ctx context.Context, id uint) (*Downloade
 	return s.execution.DownloadRecord(ctx, id)
 }
 
-func (s *BackupRecordService) Restore(ctx context.Context, id uint) error {
-	return s.execution.RestoreRecord(ctx, id)
-}
-
 func (s *BackupRecordService) Delete(ctx context.Context, id uint) error {
 	return s.execution.DeleteRecord(ctx, id)
 }

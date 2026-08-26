@@ -17,6 +17,11 @@ type SampleSource interface {
 	CountSLABreach(ctx context.Context) (int, error)
 }
 
+// BackgroundRunner is implemented by the application lifecycle supervisor.
+type BackgroundRunner interface {
+	Go(func(context.Context)) bool
+}
+
 // repoSource 把 repository 适配到 SampleSource。
 type repoSource struct {
 	targets  repository.StorageTargetRepository
@@ -90,9 +95,10 @@ func (s *repoSource) CountSLABreach(ctx context.Context) (int, error) {
 // Collector 周期性采集 gauge 类指标（存储用量、节点在线、SLA 违约）。
 // 用后台 goroutine 驱动，避免在 /metrics 请求路径做慢 IO。
 type Collector struct {
-	metrics  *Metrics
-	source   SampleSource
-	interval time.Duration
+	metrics    *Metrics
+	source     SampleSource
+	interval   time.Duration
+	background BackgroundRunner
 }
 
 // NewCollector 创建周期采集器。interval=0 走默认 30s。
@@ -103,25 +109,37 @@ func NewCollector(m *Metrics, source SampleSource, interval time.Duration) *Coll
 	return &Collector{metrics: m, source: source, interval: interval}
 }
 
+func (c *Collector) SetBackgroundRunner(runner BackgroundRunner) {
+	c.background = runner
+}
+
 // Start 在后台运行采集循环；随 ctx 取消而终止。
 // 启动时立即采一次，之后按 interval 轮询。
 func (c *Collector) Start(ctx context.Context) {
 	if c == nil || c.metrics == nil || c.source == nil {
 		return
 	}
-	go func() {
-		c.collect(ctx)
+	run := func(runCtx context.Context) {
+		c.collect(runCtx)
 		ticker := time.NewTicker(c.interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				c.collect(ctx)
+				c.collect(runCtx)
 			}
 		}
-	}()
+	}
+	if c.background != nil {
+		c.background.Go(run)
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	go run(ctx)
 }
 
 // collect 执行一次采样；单轮失败不影响下次。

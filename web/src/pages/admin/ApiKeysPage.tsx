@@ -19,8 +19,19 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AdminDataSection } from '../../components/admin/AdminDataSection'
-import { AdminRoleSelect, adminRoleDescriptions, adminRoleOptions } from '../../components/admin/AdminRoleSelect'
-import { IconCopy, IconDelete, IconList, IconPlus, IconRefresh, IconSearch } from '../../components/icons'
+import {
+  AdminRoleSelect,
+  adminRoleDescriptions,
+  adminRoleOptions,
+} from '../../components/admin/AdminRoleSelect'
+import {
+  IconCopy,
+  IconDelete,
+  IconList,
+  IconPlus,
+  IconRefresh,
+  IconSearch,
+} from '../../components/icons'
 import {
   createApiKey,
   listApiKeys,
@@ -74,14 +85,18 @@ export function ApiKeysPage() {
     void load()
   }, [load])
 
-  const now = useMemo(() => Date.now(), [items])
+  const now = Date.now()
   const filteredItems = useMemo(() => {
     const keyword = query.trim().toLowerCase()
     return items.filter((item) => {
-      const matchesQuery = !keyword || [item.name, item.prefix, item.createdBy]
-        .some((value) => value?.toLowerCase().includes(keyword))
+      const matchesQuery =
+        !keyword ||
+        [item.name, item.prefix, item.createdBy].some((value) =>
+          value?.toLowerCase().includes(keyword),
+        )
       const matchesRole = roleFilter === 'all' || item.role === roleFilter
-      const matchesStatus = statusFilter === 'all' || resolveApiKeyStatus(item, now) === statusFilter
+      const matchesStatus =
+        statusFilter === 'all' || resolveApiKeyStatus(item, now) === statusFilter
       return matchesQuery && matchesRole && matchesStatus
     })
   }, [items, now, query, roleFilter, statusFilter])
@@ -172,13 +187,17 @@ export function ApiKeysPage() {
         { label: '已停用', value: disabledCount, detail: '保留记录，可再次启用' },
         { label: '已过期', value: expiredCount, detail: '到期后无法继续认证' },
       ]}
-      actions={(
+      actions={
         <Space>
-          <Button icon={<IconList />} onClick={() => navigate('/audit?category=api_key')}>密钥审计</Button>
-          <Button type="primary" icon={<IconPlus />} onClick={openCreate}>生成 API Key</Button>
+          <Button icon={<IconList />} onClick={() => navigate('/audit?category=api_key')}>
+            密钥审计
+          </Button>
+          <Button type="primary" icon={<IconPlus />} onClick={openCreate}>
+            生成 API Key
+          </Button>
         </Space>
-      )}
-      toolbar={(
+      }
+      toolbar={
         <div className="admin-toolbar">
           <div className="admin-toolbar__filters">
             <Input
@@ -210,17 +229,25 @@ export function ApiKeysPage() {
             <Button
               type="text"
               disabled={!filtersActive}
-              onClick={() => { setQuery(''); setRoleFilter('all'); setStatusFilter('all') }}
+              onClick={() => {
+                setQuery('')
+                setRoleFilter('all')
+                setStatusFilter('all')
+              }}
             >
               清除筛选
             </Button>
           </div>
           <div className="admin-toolbar__status">
-            <Typography.Text type="secondary">显示 {filteredItems.length} / {items.length}</Typography.Text>
-            <Button icon={<IconRefresh />} loading={loading} onClick={() => void load()}>刷新</Button>
+            <Typography.Text type="secondary">
+              显示 {filteredItems.length} / {items.length}
+            </Typography.Text>
+            <Button icon={<IconRefresh />} loading={loading} onClick={() => void load()}>
+              刷新
+            </Button>
           </div>
         </div>
-      )}
+      }
     >
       {error ? (
         <div className="admin-data-panel__alert">
@@ -233,7 +260,9 @@ export function ApiKeysPage() {
         data={filteredItems}
         stripe
         pagination={filteredItems.length > 10 ? { pageSize: 10 } : false}
-        noDataElement={<Empty description={filtersActive ? '没有符合筛选条件的 API Key' : '暂无 API Key'} />}
+        noDataElement={
+          <Empty description={filtersActive ? '没有符合筛选条件的 API Key' : '暂无 API Key'} />
+        }
         columns={[
           {
             title: '名称',
@@ -242,7 +271,10 @@ export function ApiKeysPage() {
             render: (value: string, row: ApiKeySummary) => (
               <div className="admin-identity">
                 <Typography.Text>{value}</Typography.Text>
-                <span className="admin-identity__secondary" title={`由 ${row.createdBy || '-'} 创建于 ${formatDateTime(row.createdAt)}`}>
+                <span
+                  className="admin-identity__secondary"
+                  title={`由 ${row.createdBy || '-'} 创建于 ${formatDateTime(row.createdAt)}`}
+                >
                   由 {row.createdBy || '-'} 创建 · {formatDateTime(row.createdAt)}
                 </span>
               </div>
@@ -252,7 +284,11 @@ export function ApiKeysPage() {
             title: '角色',
             dataIndex: 'role',
             width: 90,
-            render: (value: string) => <Tag color="arcoblue" bordered>{roleLabel(value)}</Tag>,
+            render: (value: string) => (
+              <Tag color="arcoblue" bordered>
+                {roleLabel(value)}
+              </Tag>
+            ),
           },
           {
             title: 'Key 前缀',
@@ -264,13 +300,15 @@ export function ApiKeysPage() {
             title: '最近使用',
             dataIndex: 'lastUsedAt',
             width: 160,
-            render: (value?: string) => value ? <span className="admin-date">{formatDateTime(value)}</span> : '从未使用',
+            render: (value?: string) =>
+              value ? <span className="admin-date">{formatDateTime(value)}</span> : '从未使用',
           },
           {
             title: '有效期',
             dataIndex: 'expiresAt',
             width: 160,
-            render: (value?: string) => value ? <span className="admin-date">{formatDateTime(value)}</span> : '永不过期',
+            render: (value?: string) =>
+              value ? <span className="admin-date">{formatDateTime(value)}</span> : '永不过期',
           },
           {
             title: '状态',
@@ -278,9 +316,23 @@ export function ApiKeysPage() {
             width: 90,
             render: (_: boolean, row: ApiKeySummary) => {
               const status = resolveApiKeyStatus(row, now)
-              if (status === 'expired') return <Tag color="orange" bordered>已过期</Tag>
-              if (status === 'disabled') return <Tag color="red" bordered>已停用</Tag>
-              return <Tag color="green" bordered>当前可用</Tag>
+              if (status === 'expired')
+                return (
+                  <Tag color="orange" bordered>
+                    已过期
+                  </Tag>
+                )
+              if (status === 'disabled')
+                return (
+                  <Tag color="red" bordered>
+                    已停用
+                  </Tag>
+                )
+              return (
+                <Tag color="green" bordered>
+                  当前可用
+                </Tag>
+              )
             },
           },
           {
@@ -292,7 +344,11 @@ export function ApiKeysPage() {
                 <Space>
                   {expired ? (
                     <Tooltip content="已过期凭据不能重新启用，请生成新凭据">
-                      <span><Button size="small" type="text" disabled>启用</Button></span>
+                      <span>
+                        <Button size="small" type="text" disabled>
+                          启用
+                        </Button>
+                      </span>
                     </Tooltip>
                   ) : (
                     <Button
@@ -338,9 +394,14 @@ export function ApiKeysPage() {
       >
         {plainKey ? (
           <div className="admin-key-result">
-            <Alert type="warning" content="明文 Key 只显示一次。关闭窗口前，请将它保存到安全的密钥管理系统。" />
+            <Alert
+              type="warning"
+              content="明文 Key 只显示一次。关闭窗口前，请将它保存到安全的密钥管理系统。"
+            />
             <Input.TextArea value={plainKey} autoSize={{ minRows: 2, maxRows: 3 }} readOnly />
-            <Button type="outline" icon={<IconCopy />} onClick={() => void copyPlainKey()}>复制到剪贴板</Button>
+            <Button type="outline" icon={<IconCopy />} onClick={() => void copyPlainKey()}>
+              复制到剪贴板
+            </Button>
           </div>
         ) : (
           <Form layout="vertical">
@@ -356,7 +417,10 @@ export function ApiKeysPage() {
             <Grid.Row gutter={16}>
               <Grid.Col span={12}>
                 <Form.Item label="角色" required>
-                  <AdminRoleSelect value={draft.role} onChange={(role) => setDraft({ ...draft, role })} />
+                  <AdminRoleSelect
+                    value={draft.role}
+                    onChange={(role) => setDraft({ ...draft, role })}
+                  />
                   <span className="admin-form-note">{adminRoleDescriptions[draft.role]}</span>
                 </Form.Item>
               </Grid.Col>
@@ -370,7 +434,9 @@ export function ApiKeysPage() {
                     value={draft.ttlHours ?? 0}
                     onChange={(value) => setDraft({ ...draft, ttlHours: Number(value ?? 0) })}
                   />
-                  <span className="admin-form-note">0 表示永不过期；自动化凭据建议设置明确有效期。</span>
+                  <span className="admin-form-note">
+                    0 表示永不过期；自动化凭据建议设置明确有效期。
+                  </span>
                 </Form.Item>
               </Grid.Col>
             </Grid.Row>
