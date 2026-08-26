@@ -9,6 +9,8 @@ import (
 	"syscall"
 
 	"backupx/server/internal/agent"
+	"backupx/server/internal/config"
+	applogger "backupx/server/internal/logger"
 )
 
 // runAgent 是 `backupx agent` 子命令入口。
@@ -59,11 +61,23 @@ func runAgent(args []string) {
 		os.Exit(2)
 	}
 
+	agentLogger, err := applogger.New(config.LogConfig{Level: "info"})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "agent: init logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if syncErr := agentLogger.Sync(); syncErr != nil {
+			fmt.Fprintf(os.Stderr, "agent: flush logger: %v\n", syncErr)
+		}
+	}()
+
 	a, err := agent.New(cfg, version)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent: init: %v\n", err)
 		os.Exit(1)
 	}
+	a.SetLogger(agentLogger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

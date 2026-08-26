@@ -34,6 +34,7 @@ type DashboardService struct {
 	targets       repository.StorageTargetRepository
 	nodes         repository.NodeRepository
 	masterVersion string
+	background    BackgroundRunner
 	// slaMonitor 内部跟踪已告警的违约任务，避免每次扫描重复派发事件
 	slaNotified map[uint]time.Time
 	slaMu       sync.Mutex
@@ -41,6 +42,10 @@ type DashboardService struct {
 
 func NewDashboardService(tasks repository.BackupTaskRepository, records repository.BackupRecordRepository, targets repository.StorageTargetRepository) *DashboardService {
 	return &DashboardService{tasks: tasks, records: records, targets: targets, slaNotified: map[uint]time.Time{}}
+}
+
+func (s *DashboardService) SetBackgroundRunner(runner BackgroundRunner) {
+	s.background = runner
 }
 
 // SetClusterDependencies 注入节点仓储与 Master 版本，启用集群概览。
@@ -561,18 +566,18 @@ func (s *DashboardService) StartSLAMonitor(ctx context.Context, dispatcher Event
 	if resetInterval <= 0 {
 		resetInterval = 6 * time.Hour
 	}
-	ticker := time.NewTicker(scanInterval)
-	go func() {
+	startBackgroundMonitor(s.background, ctx, func(runCtx context.Context) {
+		ticker := time.NewTicker(scanInterval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				s.scanAndDispatchSLA(ctx, dispatcher, resetInterval)
+				s.scanAndDispatchSLA(runCtx, dispatcher, resetInterval)
 			}
 		}
-	}()
+	})
 }
 
 // scanAndDispatchSLA 执行一次 SLA 违约扫描并按需派发事件。

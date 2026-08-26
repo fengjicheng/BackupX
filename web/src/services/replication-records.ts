@@ -38,16 +38,23 @@ function buildQuery(filter: ReplicationListFilter) {
 }
 
 export async function listReplicationRecords(filter: ReplicationListFilter = {}) {
-  const response = await http.get<ApiEnvelope<ReplicationRecordSummary[]>>('/replication/records', { params: buildQuery(filter) })
+  const response = await http.get<ApiEnvelope<ReplicationRecordSummary[]>>('/replication/records', {
+    params: buildQuery(filter),
+  })
   return unwrapApiEnvelope(response.data)
 }
 
 export async function getReplicationRecord(id: number) {
-  const response = await http.get<ApiEnvelope<ReplicationRecordSummary>>(`/replication/records/${id}`)
+  const response = await http.get<ApiEnvelope<ReplicationRecordSummary>>(
+    `/replication/records/${id}`,
+  )
   return unwrapApiEnvelope(response.data)
 }
 
 export async function startReplication(backupRecordId: number, destTargetId: number) {
-  const response = await http.post<ApiEnvelope<ReplicationRecordSummary>>(`/backup/records/${backupRecordId}/replicate`, { destTargetId })
+  const response = await http.post<ApiEnvelope<ReplicationRecordSummary>>(
+    `/backup/records/${backupRecordId}/replicate`,
+    { destTargetId },
+  )
   return unwrapApiEnvelope(response.data)
 }

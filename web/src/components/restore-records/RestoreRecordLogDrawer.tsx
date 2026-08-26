@@ -30,7 +30,11 @@ function buildLogText(record: RestoreRecordDetail | null, events: BackupLogEvent
   return record?.logContent ?? ''
 }
 
-export function RestoreRecordLogDrawer({ visible, restoreId, onCancel }: RestoreRecordLogDrawerProps) {
+export function RestoreRecordLogDrawer({
+  visible,
+  restoreId,
+  onCancel,
+}: RestoreRecordLogDrawerProps) {
   const [record, setRecord] = useState<RestoreRecordDetail | null>(null)
   const [events, setEvents] = useState<BackupLogEvent[]>([])
   const [loading, setLoading] = useState(false)
@@ -69,7 +73,9 @@ export function RestoreRecordLogDrawer({ visible, restoreId, onCancel }: Restore
                 return [...current, event]
               })
               if (event.completed) {
-                setRecord((current) => (current ? { ...current, status: event.status as RestoreRecordStatus } : current))
+                setRecord((current) =>
+                  current ? { ...current, status: event.status as RestoreRecordStatus } : current,
+                )
               }
             },
             onDone: () => {
@@ -131,12 +137,20 @@ export function RestoreRecordLogDrawer({ visible, restoreId, onCancel }: Restore
             </Typography.Title>
             <Space>
               <Tag color={getStatusColor(record.status)} bordered>
-                {record.status === 'success' ? '成功' : record.status === 'failed' ? '失败' : '执行中'}
+                {record.status === 'success'
+                  ? '成功'
+                  : record.status === 'failed'
+                    ? '失败'
+                    : '执行中'}
               </Tag>
               {record.nodeName ? (
-                <Tag color="arcoblue" bordered>节点: {record.nodeName}</Tag>
+                <Tag color="arcoblue" bordered>
+                  节点: {record.nodeName}
+                </Tag>
               ) : record.nodeId === 0 ? (
-                <Tag color="arcoblue" bordered>节点: 本机 Master</Tag>
+                <Tag color="arcoblue" bordered>
+                  节点: 本机 Master
+                </Tag>
               ) : null}
               {record.triggeredBy && <Tag bordered>触发人: {record.triggeredBy}</Tag>}
             </Space>
@@ -144,7 +158,10 @@ export function RestoreRecordLogDrawer({ visible, restoreId, onCancel }: Restore
           <Descriptions
             column={1}
             data={[
-              { label: '源备份记录', value: `#${record.backupRecordId}${record.backupFileName ? ` (${record.backupFileName})` : ''}` },
+              {
+                label: '源备份记录',
+                value: `#${record.backupRecordId}${record.backupFileName ? ` (${record.backupFileName})` : ''}`,
+              },
               { label: '开始时间', value: formatDateTime(record.startedAt) },
               { label: '完成时间', value: formatDateTime(record.completedAt) },
               { label: '耗时', value: formatDuration(record.durationSeconds) },

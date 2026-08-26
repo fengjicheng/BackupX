@@ -25,17 +25,17 @@ BackupX 使用 Apache License 2.0 开源，欢迎提交 Issue 与 Pull Request�
 ## 提交 PR
 
 1. Fork 仓库，创建主题分支（如 `fix/windows-path-escape`）
-2. 执行 `make test` 确认本地全通过
+2. 执行 `make verify`，确认格式、测试、构建和文档检查全部通过
 3. 保持每个 PR 只做一件事
-4. Commit message 使用中文，格式 `类型: 简要描述`：
-   - `功能: 新增审计日志模块`
-   - `修复: 目录浏览器无法进入子目录`
-   - `重构: 简化存储目标解密逻辑`
-   - 类型：`功能` / `修复` / `重构` / `文档` / `构建` / `测试`
+4. Commit message 使用 Conventional Commits，主题使用中文：
+   - `feat(audit): 新增审计日志模块`
+   - `fix(browser): 修复目录浏览器无法进入子目录`
+   - `refactor(storage): 简化存储目标解密逻辑`
+   - 类型：`feat` / `fix` / `docs` / `style` / `refactor` / `perf` / `test` / `chore`
 5. PR 标题和正文同样使用中文，描述"为什么"和"怎么做"，而非仅仅"做了什么"
 
 ## 代码规范
 
 - **Go** — 所有错误必须处理（禁止 `_ = err`），日志使用现有 `zap`，禁止生产路径中出现 `fmt.Println`
-- **TypeScript** — 严格模式，禁止隐式 any，遵循现有 ESLint/Prettier 配置
+- **TypeScript** — 严格模式，禁止隐式 any，并通过仓库中的 ESLint 和 Prettier 检查
 - **Commit 粒度** — 每个 commit 一件事，不要把顺手的小修改和功能代码混在一起

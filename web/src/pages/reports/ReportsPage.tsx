@@ -1,4 +1,15 @@
-import { Button, Card, Grid, Message, Select, Space, Statistic, Table, Tag, Typography } from '@arco-design/web-react'
+import {
+  Button,
+  Card,
+  Grid,
+  Message,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from '@arco-design/web-react'
 import { IconDownload, IconRefresh } from '../../components/icons'
 import { useCallback, useEffect, useState } from 'react'
 import { downloadComplianceCSV, fetchComplianceReport } from '../../services/reports'
@@ -79,11 +90,16 @@ export function ReportsPage() {
         </Space>
       ),
     },
-    { title: '状态', dataIndex: 'risk', render: (_: unknown, row: ComplianceTaskRow) => riskTag(row.risk) },
+    {
+      title: '状态',
+      dataIndex: 'risk',
+      render: (_: unknown, row: ComplianceTaskRow) => riskTag(row.risk),
+    },
     {
       title: '成功率',
       dataIndex: 'successRate',
-      render: (value: number, row: ComplianceTaskRow) => (row.totalRuns > 0 ? formatPercent(value) : '—'),
+      render: (value: number, row: ComplianceTaskRow) =>
+        row.totalRuns > 0 ? formatPercent(value) : '—',
     },
     {
       title: '周期内(成功/失败)',
@@ -93,20 +109,35 @@ export function ReportsPage() {
     {
       title: '最近成功',
       dataIndex: 'lastSuccessAt',
-      render: (value?: string) => (value ? formatDateTime(value) : <Text type="secondary">从未</Text>),
+      render: (value?: string) =>
+        value ? formatDateTime(value) : <Text type="secondary">从未</Text>,
     },
     { title: '保护量', dataIndex: 'protectedBytes', render: (value: number) => formatBytes(value) },
     {
       title: '加密',
       dataIndex: 'encrypted',
       render: (value: boolean) =>
-        value ? <Tag color="arcoblue" size="small">已加密</Tag> : <Text type="secondary">否</Text>,
+        value ? (
+          <Tag color="arcoblue" size="small">
+            已加密
+          </Tag>
+        ) : (
+          <Text type="secondary">否</Text>
+        ),
     },
-    { title: 'SLA(RPO)', dataIndex: 'slaHoursRpo', render: (value: number) => (value > 0 ? `${value}h` : '—') },
+    {
+      title: 'SLA(RPO)',
+      dataIndex: 'slaHoursRpo',
+      render: (value: number) => (value > 0 ? `${value}h` : '—'),
+    },
   ]
 
   const statCards = [
-    { title: '受保护任务', value: summary?.enabledTasks ?? 0, suffix: `/ ${summary?.totalTasks ?? 0}` },
+    {
+      title: '受保护任务',
+      value: summary?.enabledTasks ?? 0,
+      suffix: `/ ${summary?.totalTasks ?? 0}`,
+    },
     { title: '合规任务', value: summary?.compliantTasks ?? 0, color: 'rgb(var(--green-6))' },
     { title: '风险任务', value: summary?.atRiskTasks ?? 0, color: 'rgb(var(--red-6))' },
     { title: '已加密任务', value: summary?.encryptedTasks ?? 0 },
@@ -114,7 +145,15 @@ export function ReportsPage() {
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
         <div>
           <Title heading={5} style={{ margin: 0 }}>
             合规报表
@@ -126,11 +165,22 @@ export function ReportsPage() {
           </Text>
         </div>
         <Space>
-          <Select value={days} onChange={(value) => setDays(value as number)} options={rangeOptions} style={{ width: 130 }} />
+          <Select
+            value={days}
+            onChange={(value) => setDays(value as number)}
+            options={rangeOptions}
+            style={{ width: 130 }}
+          />
           <Button icon={<IconRefresh />} onClick={() => void loadData(days)} loading={loading}>
             刷新
           </Button>
-          <Button type="primary" icon={<IconDownload />} onClick={() => void handleExport()} loading={exporting} disabled={loading}>
+          <Button
+            type="primary"
+            icon={<IconDownload />}
+            onClick={() => void handleExport()}
+            loading={exporting}
+            disabled={loading}
+          >
             导出 CSV
           </Button>
         </Space>
@@ -154,7 +204,11 @@ export function ReportsPage() {
       <Row gutter={16}>
         <Col span={12}>
           <Card>
-            <Statistic title="整体成功率" value={summary ? Number((summary.overallSuccessRate * 100).toFixed(1)) : 0} suffix="%" />
+            <Statistic
+              title="整体成功率"
+              value={summary ? Number((summary.overallSuccessRate * 100).toFixed(1)) : 0}
+              suffix="%"
+            />
           </Card>
         </Col>
         <Col span={12}>

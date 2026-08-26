@@ -1,10 +1,7 @@
 import { useMemo } from 'react'
 import type { BatchCreateResult, InstallTokenInput, InstallTokenResult } from '../../types/nodes'
 import { batchCreateNodes, createInstallToken } from '../../services/nodes'
-import {
-  buildAgentInstallCommand,
-  buildEmbeddedAgentInstallCommand,
-} from './installCommands'
+import { buildAgentInstallCommand, buildEmbeddedAgentInstallCommand } from './installCommands'
 
 export type DeployRowStatus = 'ready' | 'failed'
 export type DeployResultStatus = 'ready' | 'partialFailed'
@@ -38,7 +35,10 @@ interface AgentDeployFlowDeps {
 const TOKEN_CONCURRENCY = 4
 
 export function createAgentDeployFlow(deps: AgentDeployFlowDeps) {
-  const issueTokenForNode = async (node: AgentDeployNode, input: InstallTokenInput): Promise<AgentDeployRow> => {
+  const issueTokenForNode = async (
+    node: AgentDeployNode,
+    input: InstallTokenInput,
+  ): Promise<AgentDeployRow> => {
     try {
       const token = await deps.createInstallToken(node.id, input)
       return readyRow(node, token, input)
@@ -58,11 +58,16 @@ export function createAgentDeployFlow(deps: AgentDeployFlowDeps) {
     async submitNewNodes(names: string[], input: InstallTokenInput): Promise<AgentDeployResult> {
       const cleanedNames = normalizeNodeNames(names)
       const nodes = await deps.batchCreateNodes(cleanedNames)
-      const rows = await mapWithConcurrency(nodes, TOKEN_CONCURRENCY, (node) => issueTokenForNode(node, input))
+      const rows = await mapWithConcurrency(nodes, TOKEN_CONCURRENCY, (node) =>
+        issueTokenForNode(node, input),
+      )
       return resultFromRows(rows)
     },
 
-    async submitExistingNode(node: AgentDeployNode, input: InstallTokenInput): Promise<AgentDeployResult> {
+    async submitExistingNode(
+      node: AgentDeployNode,
+      input: InstallTokenInput,
+    ): Promise<AgentDeployResult> {
       const row = await issueTokenForNode(node, input)
       return resultFromRows([row])
     },
@@ -77,7 +82,11 @@ export function useAgentDeployFlow() {
   return useMemo(() => createAgentDeployFlow({ batchCreateNodes, createInstallToken }), [])
 }
 
-function readyRow(node: AgentDeployNode, token: InstallTokenResult, input: InstallTokenInput): AgentDeployRow {
+function readyRow(
+  node: AgentDeployNode,
+  token: InstallTokenResult,
+  input: InstallTokenInput,
+): AgentDeployRow {
   return {
     nodeId: node.id,
     nodeName: node.name,

@@ -1,5 +1,11 @@
 import { Button, Checkbox, Form, Input, Space, Typography, Message } from '@arco-design/web-react'
-import { BackupServerIllustration, IconCloud, IconLock, IconSafe, IconUser } from '../../components/icons'
+import {
+  BackupServerIllustration,
+  IconCloud,
+  IconLock,
+  IconSafe,
+  IconUser,
+} from '../../components/icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -86,12 +92,14 @@ export function LoginPage() {
     }
   }, [])
 
+  const invalidateSetupStatusRequest = useCallback(() => {
+    setupStatusRequest.current++
+  }, [])
+
   useEffect(() => {
     void loadSetupStatus()
-    return () => {
-      setupStatusRequest.current++
-    }
-  }, [loadSetupStatus])
+    return invalidateSetupStatusRequest
+  }, [invalidateSetupStatusRequest, loadSetupStatus])
 
   const handleSetup = async (values: SetupFormValues) => {
     setLoading(true)
@@ -131,7 +139,8 @@ export function LoginPage() {
     }
   }
 
-  function readLoginCredentials(): (LoginFormValues & { username: string; password: string }) | null {
+  function readLoginCredentials():
+    (LoginFormValues & { username: string; password: string }) | null {
     const values = loginForm.getFieldsValue()
     if (!values.username?.trim() || !values.password?.trim()) {
       Message.error(t('auth.credentialsRequired'))
@@ -163,7 +172,10 @@ export function LoginPage() {
     if (!values) return
     setMfaActionLoading('webauthn')
     try {
-      const options = await beginWebAuthnLogin({ username: values.username, password: values.password })
+      const options = await beginWebAuthnLogin({
+        username: values.username,
+        password: values.password,
+      })
       const assertion = await getWebAuthnAssertion(options)
       await doLogin({
         username: values.username,
@@ -183,16 +195,20 @@ export function LoginPage() {
     }
   }
 
-  const pageTitle = initialized === null
-    ? t('auth.setupStatusTitle')
-    : initialized
-      ? t('auth.welcomeTitle')
-      : t('auth.setupTitle')
-  const pageSubtitle = initialized === null
-    ? setupStatusFailed ? t('auth.statusErrorDescription') : t('auth.checkingStatus')
-    : initialized
-      ? t('auth.welcomeSubtitle')
-      : t('auth.setupSubtitle')
+  const pageTitle =
+    initialized === null
+      ? t('auth.setupStatusTitle')
+      : initialized
+        ? t('auth.welcomeTitle')
+        : t('auth.setupTitle')
+  const pageSubtitle =
+    initialized === null
+      ? setupStatusFailed
+        ? t('auth.statusErrorDescription')
+        : t('auth.checkingStatus')
+      : initialized
+        ? t('auth.welcomeSubtitle')
+        : t('auth.setupSubtitle')
 
   return (
     <div className="login-shell">
@@ -202,7 +218,10 @@ export function LoginPage() {
           <div className="login-banner-inner">
             <BackupServerIllustration style={{ marginBottom: 16 }} />
 
-            <Typography.Title heading={2} style={{ color: 'white', marginTop: 0, marginBottom: 12 }}>
+            <Typography.Title
+              heading={2}
+              style={{ color: 'white', marginTop: 0, marginBottom: 12 }}
+            >
               {t('auth.bannerTitle')}
             </Typography.Title>
             <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 16 }}>
@@ -210,7 +229,7 @@ export function LoginPage() {
             </Typography.Text>
           </div>
         </div>
-        
+
         <div className="login-form-wrapper">
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -218,7 +237,18 @@ export function LoginPage() {
             </div>
             <div style={{ paddingBottom: 8 }}>
               <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 16 }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 4, background: 'var(--color-primary-6)', marginRight: 12 }}>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 36,
+                    height: 36,
+                    borderRadius: 4,
+                    background: 'var(--color-primary-6)',
+                    marginRight: 12,
+                  }}
+                >
                   <IconCloud style={{ fontSize: 20, color: 'white' }} />
                 </div>
                 <Typography.Title heading={4} style={{ margin: 0 }}>
@@ -248,58 +278,150 @@ export function LoginPage() {
               )
             ) : initialized === false ? (
               <Form<SetupFormValues> layout="vertical" onSubmit={handleSetup}>
-                <Form.Item field="displayName" label={t('auth.displayName')} rules={[{ required: true, minLength: 1, message: t('auth.validation.displayNameRequired') }]}>
-                  <Input autoComplete="name" placeholder={t('auth.displayNamePlaceholder')} prefix={<IconUser />} size="large" />
+                <Form.Item
+                  field="displayName"
+                  label={t('auth.displayName')}
+                  rules={[
+                    {
+                      required: true,
+                      minLength: 1,
+                      message: t('auth.validation.displayNameRequired'),
+                    },
+                  ]}
+                >
+                  <Input
+                    autoComplete="name"
+                    placeholder={t('auth.displayNamePlaceholder')}
+                    prefix={<IconUser />}
+                    size="large"
+                  />
                 </Form.Item>
-                <Form.Item field="username" label={t('auth.username')} rules={[
-                  { required: true, message: t('auth.validation.usernameRequired') },
-                  { minLength: 3, message: t('auth.validation.usernameLength') },
-                ]}>
-                  <Input autoComplete="username" placeholder={t('auth.usernamePlaceholder')} prefix={<IconUser />} size="large" />
+                <Form.Item
+                  field="username"
+                  label={t('auth.username')}
+                  rules={[
+                    { required: true, message: t('auth.validation.usernameRequired') },
+                    { minLength: 3, message: t('auth.validation.usernameLength') },
+                  ]}
+                >
+                  <Input
+                    autoComplete="username"
+                    placeholder={t('auth.usernamePlaceholder')}
+                    prefix={<IconUser />}
+                    size="large"
+                  />
                 </Form.Item>
-                <Form.Item field="password" label={t('auth.password')} rules={[
-                  { required: true, message: t('auth.validation.passwordRequired') },
-                  { minLength: 8, message: t('auth.validation.passwordLength') },
-                ]}>
-                  <Input.Password autoComplete="new-password" placeholder={t('auth.setupPasswordPlaceholder')} prefix={<IconLock />} size="large" />
+                <Form.Item
+                  field="password"
+                  label={t('auth.password')}
+                  rules={[
+                    { required: true, message: t('auth.validation.passwordRequired') },
+                    { minLength: 8, message: t('auth.validation.passwordLength') },
+                  ]}
+                >
+                  <Input.Password
+                    autoComplete="new-password"
+                    placeholder={t('auth.setupPasswordPlaceholder')}
+                    prefix={<IconLock />}
+                    size="large"
+                  />
                 </Form.Item>
-                <Button long type="primary" htmlType="submit" loading={loading} size="large" style={{ borderRadius: 4, height: 44, marginTop: 8 }}>
+                <Button
+                  long
+                  type="primary"
+                  htmlType="submit"
+                  loading={loading}
+                  size="large"
+                  style={{ borderRadius: 4, height: 44, marginTop: 8 }}
+                >
                   {t('auth.setupSubmit')}
                 </Button>
               </Form>
             ) : (
               <Form<LoginFormValues> form={loginForm} layout="vertical" onSubmit={handleLogin}>
-                <Form.Item field="username" label={t('auth.username')} rules={[
-                  { required: true, message: t('auth.validation.usernameRequired') },
-                  { minLength: 3, message: t('auth.validation.usernameLength') },
-                ]}>
-                  <Input autoComplete="username" placeholder={t('auth.usernamePlaceholder')} prefix={<IconUser />} size="large" onChange={resetTwoFactorPrompt} />
+                <Form.Item
+                  field="username"
+                  label={t('auth.username')}
+                  rules={[
+                    { required: true, message: t('auth.validation.usernameRequired') },
+                    { minLength: 3, message: t('auth.validation.usernameLength') },
+                  ]}
+                >
+                  <Input
+                    autoComplete="username"
+                    placeholder={t('auth.usernamePlaceholder')}
+                    prefix={<IconUser />}
+                    size="large"
+                    onChange={resetTwoFactorPrompt}
+                  />
                 </Form.Item>
-                <Form.Item field="password" label={t('auth.password')} rules={[
-                  { required: true, message: t('auth.validation.passwordRequired') },
-                  { minLength: 8, message: t('auth.validation.passwordLength') },
-                ]}>
-                  <Input.Password autoComplete="current-password" placeholder={t('auth.passwordPlaceholder')} prefix={<IconLock />} size="large" onChange={resetTwoFactorPrompt} />
+                <Form.Item
+                  field="password"
+                  label={t('auth.password')}
+                  rules={[
+                    { required: true, message: t('auth.validation.passwordRequired') },
+                    { minLength: 8, message: t('auth.validation.passwordLength') },
+                  ]}
+                >
+                  <Input.Password
+                    autoComplete="current-password"
+                    placeholder={t('auth.passwordPlaceholder')}
+                    prefix={<IconLock />}
+                    size="large"
+                    onChange={resetTwoFactorPrompt}
+                  />
                 </Form.Item>
                 {twoFactorRequired && (
                   <>
-                    <Form.Item field="twoFactorCode" label={t('auth.mfaCode')} rules={[
-                      { required: true, message: t('auth.validation.mfaRequired') },
-                      { minLength: 6, maxLength: 32, message: t('auth.validation.mfaLength') },
-                    ]}>
-                      <Input autoComplete="one-time-code" placeholder={t('auth.mfaCodePlaceholder')} prefix={<IconSafe />} size="large" maxLength={32} />
+                    <Form.Item
+                      field="twoFactorCode"
+                      label={t('auth.mfaCode')}
+                      rules={[
+                        { required: true, message: t('auth.validation.mfaRequired') },
+                        { minLength: 6, maxLength: 32, message: t('auth.validation.mfaLength') },
+                      ]}
+                    >
+                      <Input
+                        autoComplete="one-time-code"
+                        placeholder={t('auth.mfaCodePlaceholder')}
+                        prefix={<IconSafe />}
+                        size="large"
+                        maxLength={32}
+                      />
                     </Form.Item>
                     <Space wrap style={{ marginTop: -8, marginBottom: 8 }}>
-                      <Button loading={mfaActionLoading === 'email'} onClick={() => void handleSendOTP('email')}>{t('auth.sendEmailCode')}</Button>
-                      <Button loading={mfaActionLoading === 'sms'} onClick={() => void handleSendOTP('sms')}>{t('auth.sendSmsCode')}</Button>
-                      <Button loading={mfaActionLoading === 'webauthn'} onClick={() => void handleWebAuthnLogin()}>{t('auth.usePasskey')}</Button>
+                      <Button
+                        loading={mfaActionLoading === 'email'}
+                        onClick={() => void handleSendOTP('email')}
+                      >
+                        {t('auth.sendEmailCode')}
+                      </Button>
+                      <Button
+                        loading={mfaActionLoading === 'sms'}
+                        onClick={() => void handleSendOTP('sms')}
+                      >
+                        {t('auth.sendSmsCode')}
+                      </Button>
+                      <Button
+                        loading={mfaActionLoading === 'webauthn'}
+                        onClick={() => void handleWebAuthnLogin()}
+                      >
+                        {t('auth.usePasskey')}
+                      </Button>
                     </Space>
                     <Form.Item field="rememberDevice" triggerPropName="checked">
                       <Checkbox>{t('auth.trustDevice')}</Checkbox>
                     </Form.Item>
                   </>
                 )}
-                <Button long type="primary" htmlType="submit" loading={loading} size="large" style={{ borderRadius: 4, height: 44, marginTop: 16 }}>
+                <Button
+                  long
+                  type="primary"
+                  htmlType="submit"
+                  loading={loading}
+                  size="large"
+                  style={{ borderRadius: 4, height: 44, marginTop: 16 }}
+                >
                   {twoFactorRequired ? t('auth.verifyAndLogin') : t('auth.login')}
                 </Button>
               </Form>

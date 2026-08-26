@@ -30,7 +30,7 @@ type Agent struct {
 
 // NewAgent 构造 Agent，初始化 storage provider 与 catalog。
 func NewAgent(ctx context.Context, cfg *Config) (*Agent, error) {
-	registry := buildStorageRegistry()
+	registry := storageRclone.NewDefaultRegistry()
 	provider, err := registry.Create(ctx, cfg.StorageType, cfg.StorageConfig)
 	if err != nil {
 		return nil, fmt.Errorf("create storage provider: %w", err)
@@ -336,24 +336,4 @@ func boolStr(b bool) string {
 		return "true"
 	}
 	return "false"
-}
-
-// buildStorageRegistry 构造与主程序一致的 storage registry。
-//
-// Backint Agent 作为独立 CLI 进程运行，不依赖 BackupX HTTP 服务，
-// 因此这里直接引用 storage/rclone 包注册所有后端。
-func buildStorageRegistry() *storage.Registry {
-	registry := storage.NewRegistry(
-		storageRclone.NewLocalDiskFactory(),
-		storageRclone.NewS3Factory(),
-		storageRclone.NewWebDAVFactory(),
-		storageRclone.NewGoogleDriveFactory(),
-		storageRclone.NewAliyunOSSFactory(),
-		storageRclone.NewTencentCOSFactory(),
-		storageRclone.NewQiniuKodoFactory(),
-		storageRclone.NewFTPFactory(),
-		storageRclone.NewRcloneFactory(),
-	)
-	storageRclone.RegisterAllBackends(registry)
-	return registry
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildAgentDownloadCommand, buildAgentInstallCommand, buildEmbeddedAgentInstallCommand } from './installCommands'
+import {
+  buildAgentDownloadCommand,
+  buildAgentInstallCommand,
+  buildEmbeddedAgentInstallCommand,
+} from './installCommands'
 
 describe('install command builders', () => {
   it('adds script marker validation and fallback install path', () => {
@@ -35,11 +39,10 @@ describe('install command builders', () => {
   })
 
   it('binds proxy and private CA settings to installer downloads', () => {
-    const cmd = buildAgentInstallCommand(
-      'https://master.internal/api/install/abc',
-      undefined,
-      { proxyUrl: 'socks5h://127.0.0.1:1080', caCertFile: '/etc/backupx-agent/ca.pem' },
-    )
+    const cmd = buildAgentInstallCommand('https://master.internal/api/install/abc', undefined, {
+      proxyUrl: 'socks5h://127.0.0.1:1080',
+      caCertFile: '/etc/backupx-agent/ca.pem',
+    })
 
     expect(cmd).toContain("--proxy 'socks5h://127.0.0.1:1080'")
     expect(cmd).toContain("--cacert '/etc/backupx-agent/ca.pem'")

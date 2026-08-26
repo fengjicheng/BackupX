@@ -15,19 +15,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client"]
+    "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src"],
-  "exclude": [
-    "src/**/*.test.ts",
-    "src/**/*.test.tsx",
-    "src/app.tsx",
-    "src/components/auth-guard.tsx",
-    "src/components/page-card.tsx",
-    "src/layouts/protected-layout.tsx",
-    "src/pages/dashboard/page.tsx",
-    "src/pages/login/page.tsx",
-    "src/pages/system-info/page.tsx",
-    "src/stores/auth.test.ts"
-  ]
+  "include": ["src"]
 }

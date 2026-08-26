@@ -62,8 +62,10 @@ func (r *MongoDBRunner) Run(ctx context.Context, task TaskSpec, writer LogWriter
 	writer.WriteLine(fmt.Sprintf("连接到 MongoDB: %s:%d", task.Database.Host, task.Database.Port))
 	stderrWriter := newLogLineWriter(writer, "mongodump")
 	writer.WriteLine("开始执行 mongodump")
-	if err := r.executor.Run(ctx, "mongodump", args, CommandOptions{Stdout: file, Stderr: stderrWriter}); err != nil {
-		return nil, fmt.Errorf("run mongodump: %w: %s", err, stderrWriter.collected())
+	runErr := r.executor.Run(ctx, "mongodump", args, CommandOptions{Stdout: file, Stderr: stderrWriter})
+	stderrWriter.Flush()
+	if runErr != nil {
+		return nil, fmt.Errorf("run mongodump: %w: %s", runErr, stderrWriter.collected())
 	}
 	info, err := file.Stat()
 	if err != nil {

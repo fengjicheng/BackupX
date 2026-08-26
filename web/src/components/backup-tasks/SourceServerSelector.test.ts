@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { NodeSummary } from '../../types/nodes'
 import { buildSourceServerOptions } from './SourceServerSelector'
 
-function node(id: number, name: string, status: NodeSummary['status'], isLocal = false): NodeSummary {
+function node(
+  id: number,
+  name: string,
+  status: NodeSummary['status'],
+  isLocal = false,
+): NodeSummary {
   return {
     id,
     name,

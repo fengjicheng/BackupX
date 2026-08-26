@@ -66,6 +66,8 @@ type StorageRangeDownloader interface {
 
 type ProviderFactory interface {
 	Type() ProviderType
+	SensitiveFields() []string
+	New(context.Context, map[string]any) (StorageProvider, error)
 }
 
 // StorageAbout 是可选能力接口，支持查询远端存储空间。

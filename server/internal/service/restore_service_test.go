@@ -84,6 +84,11 @@ func newRestoreTestHarness(t *testing.T, remoteNode bool) *restoreTestHarness {
 	if err != nil {
 		t.Fatalf("database.Open: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	cipher := codec.NewConfigCipher("restore-secret")
 	targets := repository.NewStorageTargetRepository(db)
 	tasks := repository.NewBackupTaskRepository(db)
@@ -159,11 +164,12 @@ func TestRestoreServiceStart_LocalNodeExecutesInline(t *testing.T) {
 
 	// 用同步 async 让测试可等待
 	done := make(chan struct{})
-	h.service.async = func(job func()) {
+	h.service.async = func(job func(context.Context)) bool {
 		go func() {
-			job()
+			job(context.Background())
 			close(done)
 		}()
+		return true
 	}
 	detail, err := h.service.Start(ctx, backupDetail.ID, "tester")
 	if err != nil {
@@ -197,6 +203,62 @@ func TestRestoreServiceStart_LocalNodeExecutesInline(t *testing.T) {
 	}
 	if len(h.dispatcher.snapshot()) != 0 {
 		t.Fatalf("expected no dispatcher calls for local node, got %d", len(h.dispatcher.snapshot()))
+	}
+}
+
+func TestRestoreServiceStart_RepositoryRecord(t *testing.T) {
+	h := newRestoreTestHarness(t, false)
+	ctx := context.Background()
+	task, err := h.tasks.FindByID(ctx, 1)
+	if err != nil {
+		t.Fatalf("FindByID task: %v", err)
+	}
+	task.BackupMode = model.BackupModeRepository
+	if err := h.tasks.Update(ctx, task); err != nil {
+		t.Fatalf("Update repository task: %v", err)
+	}
+
+	backupDetail, err := h.execution.RunTaskByIDSync(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("RunTaskByIDSync repository: %v", err)
+	}
+	if backupDetail.BackupKind != model.BackupKindRepository {
+		t.Fatalf("expected repository backup, got %#v", backupDetail)
+	}
+	if err := os.RemoveAll(h.sourceDir); err != nil {
+		t.Fatalf("remove source: %v", err)
+	}
+
+	done := make(chan struct{})
+	h.service.async = func(job func(context.Context)) bool {
+		go func() {
+			job(context.Background())
+			close(done)
+		}()
+		return true
+	}
+	detail, err := h.service.Start(ctx, backupDetail.ID, "repository-test")
+	if err != nil {
+		t.Fatalf("Start repository restore: %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("repository restore did not complete in time")
+	}
+	final, err := h.service.Get(ctx, detail.ID)
+	if err != nil {
+		t.Fatalf("Get repository restore: %v", err)
+	}
+	if final.Status != model.RestoreRecordStatusSuccess {
+		t.Fatalf("expected repository restore success, got %s (err=%s)", final.Status, final.ErrorMessage)
+	}
+	content, err := os.ReadFile(filepath.Join(h.sourceDir, "index.html"))
+	if err != nil {
+		t.Fatalf("read repository-restored file: %v", err)
+	}
+	if string(content) != "hello-restore" {
+		t.Fatalf("unexpected repository-restored content: %q", content)
 	}
 }
 
@@ -242,8 +304,9 @@ func TestRestoreServiceStart_RejectsCorruptedBackup(t *testing.T) {
 	}
 
 	done := make(chan struct{})
-	h.service.async = func(job func()) {
-		go func() { job(); close(done) }()
+	h.service.async = func(job func(context.Context)) bool {
+		go func() { job(context.Background()); close(done) }()
+		return true
 	}
 	detail, err := h.service.Start(ctx, backupDetail.ID, "tester")
 	if err != nil {
@@ -293,11 +356,12 @@ func TestRestoreServiceStart_RestoresToAlternatePath(t *testing.T) {
 	}
 
 	done := make(chan struct{})
-	h.service.async = func(job func()) {
+	h.service.async = func(job func(context.Context)) bool {
 		go func() {
-			job()
+			job(context.Background())
 			close(done)
 		}()
+		return true
 	}
 	detail, err := h.service.StartSelective(ctx, backupDetail.ID, nil, altDir, "tester")
 	if err != nil {

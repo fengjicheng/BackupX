@@ -1,4 +1,13 @@
-import { Button, Input, Message, Modal, Space, Spin, Tree, Typography, Empty } from '@arco-design/web-react'
+import {
+  Button,
+  Input,
+  Message,
+  Modal,
+  Spin,
+  Tree,
+  Typography,
+  Empty,
+} from '@arco-design/web-react'
 import { IconFolder, IconFile, IconFolderAdd } from '../icons'
 import { useCallback, useState } from 'react'
 import { listNodeDirectory } from '../../services/nodes'
@@ -32,7 +41,13 @@ function entriesToTreeNodes(entries: DirEntry[], mode: 'directory' | 'file'): Tr
     }))
 }
 
-export function DirectoryPicker({ value, onChange, placeholder, mode = 'directory', nodeId }: DirectoryPickerProps) {
+export function DirectoryPicker({
+  value,
+  onChange,
+  placeholder,
+  mode = 'directory',
+  nodeId,
+}: DirectoryPickerProps) {
   const [modalVisible, setModalVisible] = useState(false)
   const [treeData, setTreeData] = useState<TreeNodeData[]>([])
   const [loading, setLoading] = useState(false)
@@ -106,7 +121,14 @@ export function DirectoryPicker({ value, onChange, placeholder, mode = 'director
 
   // 没有 nodeId 时退化为普通输入框
   if (nodeId === undefined) {
-    return <Input value={value} placeholder={placeholder} onChange={onChange} onKeyDown={handleInputKeyDown} />
+    return (
+      <Input
+        value={value}
+        placeholder={placeholder}
+        onChange={onChange}
+        onKeyDown={handleInputKeyDown}
+      />
+    )
   }
 
   return (
@@ -137,40 +159,60 @@ export function DirectoryPicker({ value, onChange, placeholder, mode = 'director
         unmountOnExit
       >
         {/* 当前选中路径 */}
-        <div style={{
-          padding: '10px 14px',
-          marginBottom: 16,
-          background: selectedPath ? 'var(--color-primary-light-1)' : 'var(--color-fill-2)',
-          borderRadius: 6,
-          border: selectedPath ? '1px solid var(--color-primary-light-3)' : '1px solid var(--color-border)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          minHeight: 40,
-        }}>
-          <IconFolder style={{ color: selectedPath ? 'var(--color-primary-6)' : 'var(--color-text-4)', fontSize: 16, flexShrink: 0 }} />
+        <div
+          style={{
+            padding: '10px 14px',
+            marginBottom: 16,
+            background: selectedPath ? 'var(--color-primary-light-1)' : 'var(--color-fill-2)',
+            borderRadius: 6,
+            border: selectedPath
+              ? '1px solid var(--color-primary-light-3)'
+              : '1px solid var(--color-border)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            minHeight: 40,
+          }}
+        >
+          <IconFolder
+            style={{
+              color: selectedPath ? 'var(--color-primary-6)' : 'var(--color-text-4)',
+              fontSize: 16,
+              flexShrink: 0,
+            }}
+          />
           {selectedPath ? (
-            <Typography.Text copyable style={{ fontSize: 13, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+            <Typography.Text
+              copyable
+              style={{ fontSize: 13, fontFamily: 'monospace', wordBreak: 'break-all' }}
+            >
               {selectedPath}
             </Typography.Text>
           ) : (
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>请在下方目录树中选择路径</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              请在下方目录树中选择路径
+            </Typography.Text>
           )}
         </div>
 
         {/* 目录树 */}
         {loading ? (
-          <Spin style={{ display: 'block', textAlign: 'center', padding: 48 }} tip="加载目录中..." />
+          <Spin
+            style={{ display: 'block', textAlign: 'center', padding: 48 }}
+            tip="加载目录中..."
+          />
         ) : treeData.length === 0 ? (
           <Empty style={{ padding: 48 }} description="目录为空" />
         ) : (
-          <div style={{
-            maxHeight: 400,
-            overflow: 'auto',
-            border: '1px solid var(--color-border)',
-            borderRadius: 6,
-            padding: '6px 0',
-          }}>
+          <div
+            style={{
+              maxHeight: 400,
+              overflow: 'auto',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              padding: '6px 0',
+            }}
+          >
             <Tree
               blockNode
               showLine

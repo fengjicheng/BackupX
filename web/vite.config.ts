@@ -28,7 +28,5 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     globals: true,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    exclude: ['src/components/auth-guard.test.tsx', 'src/stores/auth.test.ts'],
   },
 })
-

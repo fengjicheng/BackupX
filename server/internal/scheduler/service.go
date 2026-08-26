@@ -38,6 +38,7 @@ type Service struct {
 	verifyRunner  VerifyRunner
 	logger        *zap.Logger
 	audit         AuditRecorder
+	runCtx        context.Context
 	entries       map[uint]cron.EntryID // 备份 cron 条目
 	verifyEntries map[uint]cron.EntryID // 验证 cron 条目
 }
@@ -49,6 +50,7 @@ func NewService(tasks repository.BackupTaskRepository, runner TaskRunner, logger
 		tasks:         tasks,
 		runner:        runner,
 		logger:        logger,
+		runCtx:        context.Background(),
 		entries:       make(map[uint]cron.EntryID),
 		verifyEntries: make(map[uint]cron.EntryID),
 	}
@@ -72,6 +74,12 @@ func (s *Service) SetNodeRepository(nodes repository.NodeRepository) {
 }
 
 func (s *Service) Start(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.mu.Lock()
+	s.runCtx = ctx
+	s.mu.Unlock()
 	if err := s.Reload(ctx); err != nil {
 		return err
 	}
@@ -163,10 +171,11 @@ func (s *Service) syncTaskLocked(task *model.BackupTask) error {
 	taskNodeID := task.NodeID
 	cronExpr := task.CronExpr
 	maintenanceWindows := task.MaintenanceWindows
+	runCtx := s.runCtx
 	entryID, err := s.cron.AddFunc(cronExpr, func() {
 		// 集群感知：若任务绑定了离线的远程节点，跳过本轮触发避免堆积 failed 记录
 		if taskNodeID > 0 && s.nodes != nil {
-			node, err := s.nodes.FindByID(context.Background(), taskNodeID)
+			node, err := s.nodes.FindByID(runCtx, taskNodeID)
 			// 用实时推导的状态判定，避免后台监控刷新前把任务下发给刚失联的节点。
 			if err == nil && node != nil && !node.IsLocal && node.EffectiveStatus(time.Now().UTC()) != model.NodeStatusOnline {
 				if s.logger != nil {
@@ -213,7 +222,7 @@ func (s *Service) syncTaskLocked(task *model.BackupTask) error {
 				TargetName: taskName, Detail: fmt.Sprintf("定时调度触发备份任务: %s (cron: %s)", taskName, cronExpr),
 			})
 		}
-		if _, runErr := s.runner.RunTaskByID(context.Background(), taskID); runErr != nil && s.logger != nil {
+		if _, runErr := s.runner.RunTaskByID(runCtx, taskID); runErr != nil && s.logger != nil {
 			s.logger.Warn("scheduled backup run failed", zap.Uint("task_id", taskID), zap.Error(runErr))
 		}
 	})
@@ -245,6 +254,7 @@ func (s *Service) syncVerifyTaskLocked(task *model.BackupTask) error {
 	taskName := task.Name
 	mode := task.VerifyMode
 	verifyCron := task.VerifyCronExpr
+	runCtx := s.runCtx
 	entryID, err := s.cron.AddFunc(verifyCron, func() {
 		if s.audit != nil {
 			s.audit.Record(servicepkg.AuditEntry{
@@ -253,7 +263,7 @@ func (s *Service) syncVerifyTaskLocked(task *model.BackupTask) error {
 				TargetName: taskName, Detail: fmt.Sprintf("定时验证演练: %s (cron: %s, mode: %s)", taskName, verifyCron, mode),
 			})
 		}
-		if _, runErr := s.verifyRunner.StartByTask(context.Background(), taskID, mode, "system"); runErr != nil && s.logger != nil {
+		if _, runErr := s.verifyRunner.StartByTask(runCtx, taskID, mode, "system"); runErr != nil && s.logger != nil {
 			s.logger.Warn("scheduled verify run failed", zap.Uint("task_id", taskID), zap.Error(runErr))
 		}
 	})

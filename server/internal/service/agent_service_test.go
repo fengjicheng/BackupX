@@ -24,6 +24,15 @@ import (
 	"gorm.io/gorm"
 )
 
+type failingUpdateBackupRecordRepository struct {
+	repository.BackupRecordRepository
+	updateErr error
+}
+
+func (r *failingUpdateBackupRecordRepository) Update(context.Context, *model.BackupRecord) error {
+	return r.updateErr
+}
+
 func newAgentServicePoolTestHarness(t *testing.T) (*AgentService, *gorm.DB, repository.BackupRecordRepository, repository.AgentCommandRepository, *model.Node, *model.Node) {
 	t.Helper()
 	log, err := logger.New(config.LogConfig{Level: "error"})
@@ -34,6 +43,7 @@ func newAgentServicePoolTestHarness(t *testing.T) (*AgentService, *gorm.DB, repo
 	if err != nil {
 		t.Fatalf("database.Open returned error: %v", err)
 	}
+	closeTestDatabase(t, db)
 	cipher := codec.NewConfigCipher("agent-service-secret")
 	nodeRepo := repository.NewNodeRepository(db)
 	taskRepo := repository.NewBackupTaskRepository(db)
@@ -85,6 +95,23 @@ func newAgentServicePoolTestHarness(t *testing.T) (*AgentService, *gorm.DB, repo
 	}
 	storageRegistry := storage.NewRegistry(storageRclone.NewLocalDiskFactory())
 	return NewAgentService(nodeRepo, taskRepo, recordRepo, storageRepo, cmdRepo, cipher, storageRegistry), db, recordRepo, cmdRepo, owner, other
+}
+
+func TestAgentServiceFailLinkedRecordPropagatesTerminalUpdateError(t *testing.T) {
+	svc, _, records, _, _, _ := newAgentServicePoolTestHarness(t)
+	wantErr := errors.New("record update failed")
+	svc.recordRepo = &failingUpdateBackupRecordRepository{
+		BackupRecordRepository: records,
+		updateErr:              wantErr,
+	}
+
+	err := svc.failLinkedRecord(context.Background(), &model.AgentCommand{
+		Type:    model.AgentCommandTypeRunTask,
+		Payload: `{"recordId":1}`,
+	})
+	if err == nil || !errors.Is(err, wantErr) {
+		t.Fatalf("failLinkedRecord error = %v, want wrapped update error", err)
+	}
 }
 
 func TestAgentServicePooledTaskUsesRecordNodeForSpecAndRecordUpdates(t *testing.T) {
@@ -749,6 +776,44 @@ func TestAgentServiceSubmitCommandResultDoesNotOverwriteTerminalCommand(t *testi
 	}
 	if updatedCommand.Result != "" {
 		t.Fatalf("expected terminal command result to remain empty, got %q", updatedCommand.Result)
+	}
+}
+
+func TestAgentServiceSubmitFailedCommandConvergesLinkedRecord(t *testing.T) {
+	svc, _, records, commands, owner, _ := newAgentServicePoolTestHarness(t)
+	ctx := context.Background()
+	dispatchedAt := time.Now().UTC()
+	command := &model.AgentCommand{
+		NodeID:       owner.ID,
+		Type:         model.AgentCommandTypeRunTask,
+		Status:       model.AgentCommandStatusDispatched,
+		Payload:      `{"recordId":1}`,
+		DispatchedAt: &dispatchedAt,
+	}
+	if err := commands.Create(ctx, command); err != nil {
+		t.Fatalf("Create command returned error: %v", err)
+	}
+
+	if err := svc.SubmitCommandResult(ctx, owner, command.ID, AgentCommandResult{
+		Success:      false,
+		ErrorMessage: "terminal update could not reach Master",
+	}); err != nil {
+		t.Fatalf("SubmitCommandResult returned error: %v", err)
+	}
+
+	record, err := records.FindByID(ctx, 1)
+	if err != nil {
+		t.Fatalf("FindByID record returned error: %v", err)
+	}
+	if record.Status != model.BackupRecordStatusFailed || !strings.Contains(record.ErrorMessage, "terminal update") {
+		t.Fatalf("linked record did not converge: %#v", record)
+	}
+	updatedCommand, err := commands.FindByID(ctx, command.ID)
+	if err != nil {
+		t.Fatalf("FindByID command returned error: %v", err)
+	}
+	if updatedCommand.Status != model.AgentCommandStatusFailed {
+		t.Fatalf("command status = %q, want failed", updatedCommand.Status)
 	}
 }
 

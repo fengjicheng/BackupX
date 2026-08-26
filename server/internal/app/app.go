@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	stdhttp "net/http"
+	"sync"
 	"time"
 
 	"backupx/server/internal/backup"
@@ -12,6 +13,7 @@ import (
 	"backupx/server/internal/config"
 	"backupx/server/internal/database"
 	aphttp "backupx/server/internal/http"
+	"backupx/server/internal/lifecycle"
 	"backupx/server/internal/logger"
 	"backupx/server/internal/metrics"
 	"backupx/server/internal/notify"
@@ -19,7 +21,6 @@ import (
 	"backupx/server/internal/scheduler"
 	"backupx/server/internal/security"
 	"backupx/server/internal/service"
-	"backupx/server/internal/storage"
 	"backupx/server/internal/storage/codec"
 	storageRclone "backupx/server/internal/storage/rclone"
 	"go.uber.org/zap"
@@ -33,6 +34,10 @@ type Application struct {
 	db         *gorm.DB
 	httpServer *stdhttp.Server
 	scheduler  *scheduler.Service
+	background *lifecycle.Supervisor
+
+	shutdownMu sync.Mutex
+	closeOnce  sync.Once
 }
 
 func New(ctx context.Context, cfg config.Config, version string) (*Application, error) {
@@ -55,34 +60,30 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 	oauthSessionRepo := repository.NewOAuthSessionRepository(db)
 	resolvedSecurity, err := service.ResolveSecurity(ctx, cfg.Security, systemConfigRepo)
 	if err != nil {
-		return nil, fmt.Errorf("resolve security config: %w", err)
+		resolveErr := fmt.Errorf("resolve security config: %w", err)
+		if sqlDB, handleErr := db.DB(); handleErr != nil {
+			resolveErr = errors.Join(resolveErr, fmt.Errorf("get database handle for cleanup: %w", handleErr))
+		} else if closeErr := sqlDB.Close(); closeErr != nil {
+			resolveErr = errors.Join(resolveErr, fmt.Errorf("close database after bootstrap failure: %w", closeErr))
+		}
+		return nil, resolveErr
 	}
+	background := lifecycle.NewSupervisor(ctx)
 
 	jwtManager := security.NewJWTManager(resolvedSecurity.JWTSecret, config.MustJWTDuration(cfg.Security))
 	rateLimiter := security.NewLoginRateLimiter(5, time.Minute)
 	configCipher := codec.NewConfigCipher(resolvedSecurity.EncryptionKey)
 	authService := service.NewAuthService(userRepo, systemConfigRepo, jwtManager, rateLimiter, configCipher)
 	systemService := service.NewSystemService(cfg, version, time.Now().UTC())
-	storageRegistry := storage.NewRegistry(
-		storageRclone.NewLocalDiskFactory(),
-		storageRclone.NewS3Factory(),
-		storageRclone.NewWebDAVFactory(),
-		storageRclone.NewGoogleDriveFactory(),
-		storageRclone.NewAliyunOSSFactory(),
-		storageRclone.NewTencentCOSFactory(),
-		storageRclone.NewQiniuKodoFactory(),
-		storageRclone.NewFTPFactory(),
-		storageRclone.NewRcloneFactory(),
-	)
-	// 将全部 rclone 后端注册为独立存储类型（sftp、azureblob、dropbox 等与 s3、ftp 完全平级）
-	storageRclone.RegisterAllBackends(storageRegistry)
+	storageRegistry := storageRclone.NewDefaultRegistry()
 	storageTargetService := service.NewStorageTargetService(storageTargetRepo, oauthSessionRepo, storageRegistry, configCipher)
+	storageTargetService.SetBackgroundRunner(background)
 	storageTargetService.SetBackupTaskRepository(backupTaskRepo)
 	storageTargetService.SetBackupRecordRepository(backupRecordRepo)
 	backupTaskService := service.NewBackupTaskService(backupTaskRepo, storageTargetRepo, configCipher)
 	backupTaskService.SetRecordsAndStorage(backupRecordRepo, storageRegistry)
 	// nodeRepo 在下方 Cluster 节点管理区块才实例化，这里延后注入
-	backupRunnerRegistry := backup.NewRegistry(backup.NewFileRunner(), backup.NewSQLiteRunner(), backup.NewMySQLRunner(nil), backup.NewPostgreSQLRunner(nil), backup.NewSAPHANARunner(nil), backup.NewMongoDBRunner(nil))
+	backupRunnerRegistry := backup.NewDefaultRegistry()
 	logHub := backup.NewLogHub()
 	retentionService := backupretention.NewService(backupRecordRepo, configCipher.Key())
 	notifyRegistry := notify.NewRegistry(notify.NewEmailNotifier(), notify.NewWebhookNotifier(), notify.NewTelegramNotifier())
@@ -96,6 +97,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 	storageRclone.StartAccounting(rcloneCtx)
 
 	backupExecutionService := service.NewBackupExecutionService(backupTaskRepo, backupRecordRepo, storageTargetRepo, storageRegistry, backupRunnerRegistry, logHub, retentionService, configCipher, notificationService, cfg.Backup.TempDir, cfg.Backup.MaxConcurrent, cfg.Backup.Retries, cfg.Backup.BandwidthLimit)
+	backupExecutionService.SetBackgroundRunner(background)
 	schedulerService := scheduler.NewService(backupTaskRepo, backupExecutionService, appLogger)
 	backupTaskService.SetScheduler(schedulerService)
 	// 审计日志注入延迟到 auditService 创建后（见下方）
@@ -104,12 +106,15 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 	restoreRecordRepo := repository.NewRestoreRecordRepository(db)
 	restoreLogHub := backup.NewLogHub()
 	dashboardService := service.NewDashboardService(backupTaskRepo, backupRecordRepo, storageTargetRepo)
+	dashboardService.SetBackgroundRunner(background)
 	reportService := service.NewReportService(backupTaskRepo, backupRecordRepo)
 	settingsService := service.NewSettingsService(systemConfigRepo)
 
 	// Audit
 	auditLogRepo := repository.NewAuditLogRepository(db)
 	auditService := service.NewAuditService(auditLogRepo)
+	auditService.SetLogger(appLogger)
+	auditService.SetBackgroundRunner(background)
 	authService.SetAuditService(auditService)
 	schedulerService.SetAuditRecorder(auditService)
 	// 审计日志外输：启动时用当前 settings 初始化 webhook，后续前端修改立即生效
@@ -125,6 +130,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 	backupTaskService.SetNodeRepository(nodeRepo)
 	schedulerService.SetNodeRepository(nodeRepo)
 	nodeService := service.NewNodeService(nodeRepo, version)
+	nodeService.SetBackgroundRunner(background)
 	nodeService.SetTaskRepository(backupTaskRepo)
 	if err := nodeService.EnsureLocalNode(ctx); err != nil {
 		appLogger.Warn("failed to ensure local node", zap.Error(err))
@@ -136,12 +142,15 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 	agentCmdRepo := repository.NewAgentCommandRepository(db)
 	nodeService.SetAgentCommandRepository(agentCmdRepo)
 	agentService := service.NewAgentService(nodeRepo, backupTaskRepo, backupRecordRepo, storageTargetRepo, agentCmdRepo, configCipher, storageRegistry)
+	agentService.SetLogger(appLogger)
+	agentService.SetBackgroundRunner(background)
 	agentService.SetRestoreRepository(restoreRecordRepo)
 	agentService.StartCommandTimeoutMonitor(ctx, 30*time.Second, 10*time.Minute)
 
 	// 一键部署：install token service + 后台 GC
 	installTokenRepo := repository.NewAgentInstallTokenRepository(db)
 	installTokenService := service.NewInstallTokenService(installTokenRepo, nodeRepo)
+	installTokenService.SetBackgroundRunner(background)
 	installTokenService.StartGC(ctx, time.Hour)
 
 	// 把 Agent 下发能力注入到备份执行服务，实现多节点路由
@@ -166,6 +175,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 		cfg.Backup.TempDir,
 		cfg.Backup.MaxConcurrent,
 	)
+	restoreService.SetBackgroundRunner(background)
 
 	// 验证服务：定期校验备份可恢复性（企业合规刚需）
 	verificationRecordRepo := repository.NewVerificationRecordRepository(db)
@@ -182,6 +192,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 		cfg.Backup.TempDir,
 		cfg.Backup.MaxConcurrent,
 	)
+	verificationService.SetBackgroundRunner(background)
 	// 验证失败通知：通过 NotificationService 的事件总线派发 verify_failed
 	verificationService.SetNotifier(service.NewVerificationEventNotifier(notificationService))
 	// 恢复完成/失败事件派发（restore_success / restore_failed）
@@ -206,6 +217,8 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 		nodeRepo, storageRegistry, configCipher,
 		cfg.Backup.TempDir, cfg.Backup.MaxConcurrent,
 	)
+	replicationService.SetLogger(appLogger)
+	replicationService.SetBackgroundRunner(background)
 	replicationService.SetEventDispatcher(notificationService)
 	backupExecutionService.SetReplicationTrigger(replicationService)
 	// 备份成功后触发下游依赖任务（任务依赖链工作流）
@@ -229,6 +242,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 	// 集群版本监控：每 30 分钟扫描，节点 24 小时内只告警一次
 	clusterVersionMonitor := service.NewClusterVersionMonitor(nodeRepo, version)
 	clusterVersionMonitor.SetEventDispatcher(notificationService)
+	clusterVersionMonitor.SetBackgroundRunner(background)
 	clusterVersionMonitor.Start(ctx, 30*time.Minute, 24*time.Hour)
 
 	// Dashboard 集群概览依赖注入
@@ -247,6 +261,7 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 		metrics.NewRepoSource(storageTargetRepo, backupRecordRepo, nodeRepo, backupTaskRepo, agentCmdRepo),
 		30*time.Second,
 	)
+	metricsCollector.SetBackgroundRunner(background)
 	metricsCollector.Start(ctx)
 
 	router := aphttp.NewRouter(aphttp.RouterDependencies{
@@ -299,13 +314,21 @@ func New(ctx context.Context, cfg config.Config, version string) (*Application, 
 		db:         db,
 		httpServer: httpServer,
 		scheduler:  schedulerService,
+		background: background,
 	}, nil
 }
 
 func (a *Application) Run(ctx context.Context) error {
 	if a.scheduler != nil {
-		if err := a.scheduler.Start(context.Background()); err != nil {
-			return fmt.Errorf("start scheduler: %w", err)
+		runCtx := ctx
+		if a.background != nil {
+			runCtx = a.background.Context()
+		}
+		if err := a.scheduler.Start(runCtx); err != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			shutdownErr := a.Shutdown(shutdownCtx)
+			return errors.Join(fmt.Errorf("start scheduler: %w", err), shutdownErr)
 		}
 	}
 	errCh := make(chan error, 1)
@@ -320,30 +343,77 @@ func (a *Application) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		a.logger.Info("shutdown signal received")
-		if err := a.httpServer.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("shutdown http server: %w", err)
-		}
-		if a.scheduler != nil {
-			if err := a.scheduler.Stop(context.Background()); err != nil {
-				return fmt.Errorf("stop scheduler: %w", err)
-			}
-		}
-		return nil
+		return a.Shutdown(shutdownCtx)
 	case err := <-errCh:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		shutdownErr := a.Shutdown(shutdownCtx)
 		if err != nil {
-			return fmt.Errorf("serve http: %w", err)
+			return errors.Join(fmt.Errorf("serve http: %w", err), shutdownErr)
 		}
-		return nil
+		return shutdownErr
 	}
 }
 
-func (a *Application) Close() {
-	if a.logger != nil {
-		_ = a.logger.Sync()
+// Shutdown stops new scheduled and HTTP work before canceling and waiting for
+// application-owned background tasks. Every phase is attempted even if an
+// earlier phase fails, so a timeout cannot leave workers detached.
+func (a *Application) Shutdown(ctx context.Context) error {
+	if a == nil {
+		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	a.shutdownMu.Lock()
+	defer a.shutdownMu.Unlock()
+	var shutdownErrors []error
+	if a.scheduler != nil {
+		if err := a.scheduler.Stop(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("stop scheduler: %w", err))
+		}
+	}
+	if a.httpServer != nil {
+		if err := a.httpServer.Shutdown(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("shutdown http server: %w", err))
+		}
+	}
+	if a.background != nil {
+		if err := a.background.Shutdown(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("stop background tasks: %w", err))
+		}
+	}
+	return errors.Join(shutdownErrors...)
+}
+
+func (a *Application) Close() {
+	if a == nil {
+		return
+	}
+	a.closeOnce.Do(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := a.Shutdown(shutdownCtx); err != nil && a.logger != nil {
+			a.logger.Warn("application cleanup incomplete", zap.Error(err))
+		}
+		if a.db != nil {
+			if sqlDB, err := a.db.DB(); err != nil {
+				if a.logger != nil {
+					a.logger.Warn("get database handle for close failed", zap.Error(err))
+				}
+			} else if err := sqlDB.Close(); err != nil && a.logger != nil {
+				a.logger.Warn("close database failed", zap.Error(err))
+			}
+		}
+		if a.logger != nil {
+			if err := a.logger.Sync(); err != nil {
+				a.logger.Warn("flush logger failed", zap.Error(err))
+			}
+		}
+	})
 }
 
 func (a *Application) Logger() *zap.Logger {

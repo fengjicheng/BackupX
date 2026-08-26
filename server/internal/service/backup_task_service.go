@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -389,7 +390,15 @@ func (s *BackupTaskService) Delete(ctx context.Context, id uint) (*DeleteResult,
 		return nil, apperror.New(http.StatusNotFound, "BACKUP_TASK_NOT_FOUND", "备份任务不存在", fmt.Errorf("backup task %d not found", id))
 	}
 	if s.scheduler != nil {
-		_ = s.scheduler.RemoveTask(ctx, id)
+		if err := s.scheduler.RemoveTask(ctx, id); err != nil {
+			rollbackCtx, cancel := finalizationContext(ctx)
+			rollbackErr := s.scheduler.SyncTask(rollbackCtx, existing)
+			cancel()
+			if rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf("restore task schedule: %w", rollbackErr))
+			}
+			return nil, apperror.Internal("BACKUP_TASK_UNSCHEDULE_FAILED", "无法移除备份任务调度", err)
+		}
 	}
 
 	// 清理远端存储文件（尽力而为，不阻止删除）
@@ -397,6 +406,14 @@ func (s *BackupTaskService) Delete(ctx context.Context, id uint) (*DeleteResult,
 	result.RecordCount, result.CleanedFiles = s.cleanupRemoteFiles(ctx, id)
 
 	if err := s.tasks.Delete(ctx, id); err != nil {
+		if s.scheduler != nil {
+			rollbackCtx, cancel := finalizationContext(ctx)
+			rollbackErr := s.scheduler.SyncTask(rollbackCtx, existing)
+			cancel()
+			if rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf("restore task schedule: %w", rollbackErr))
+			}
+		}
 		return nil, apperror.Internal("BACKUP_TASK_DELETE_FAILED", "无法删除备份任务", err)
 	}
 	return result, nil

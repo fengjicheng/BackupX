@@ -304,6 +304,7 @@ func (r *SAPHANARunner) runHdbsqlWithRetry(ctx context.Context, name string, arg
 		}
 		stderrWriter := newLogLineWriter(writer, "hdbsql")
 		err := r.executor.Run(ctx, name, args, CommandOptions{Stderr: stderrWriter})
+		stderrWriter.Flush()
 		if err == nil {
 			return nil
 		}

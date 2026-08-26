@@ -2,7 +2,12 @@ import { Empty, Input, Modal, Space, Spin, Tag, Typography } from '@arco-design/
 import { IconSearch } from '../icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { globalSearch, type SearchKind, type SearchResult, type SearchResultItem } from '../../services/search'
+import {
+  globalSearch,
+  type SearchKind,
+  type SearchResult,
+  type SearchResultItem,
+} from '../../services/search'
 
 const KIND_LABELS: Record<SearchKind, string> = {
   task: '任务',
@@ -96,13 +101,23 @@ export function GlobalSearch() {
                 marginBottom: 4,
                 backgroundColor: 'var(--color-fill-1)',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-primary-light-1)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-fill-1)' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--color-primary-light-1)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--color-fill-1)'
+              }}
             >
               <Space>
-                <Tag color={KIND_COLORS[kind]} bordered size="small">{KIND_LABELS[kind]}</Tag>
+                <Tag color={KIND_COLORS[kind]} bordered size="small">
+                  {KIND_LABELS[kind]}
+                </Tag>
                 <Typography.Text bold>{item.title}</Typography.Text>
-                {item.subtitle && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{item.subtitle}</Typography.Text>}
+                {item.subtitle && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {item.subtitle}
+                  </Typography.Text>
+                )}
               </Space>
             </div>
           ))}
@@ -151,7 +166,9 @@ export function GlobalSearch() {
         />
         <div style={{ marginTop: 16, maxHeight: 480, overflow: 'auto' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <Spin />
+            </div>
           ) : !result || result.totalCount === 0 ? (
             <Empty description={query ? '未找到匹配项' : '开始输入以搜索'} />
           ) : (

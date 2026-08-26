@@ -21,6 +21,7 @@ type ClusterVersionMonitor struct {
 	nodeRepo        repository.NodeRepository
 	eventDispatcher EventDispatcher
 	masterVersion   string
+	background      BackgroundRunner
 	mu              sync.Mutex
 	notified        map[uint]time.Time
 }
@@ -37,6 +38,10 @@ func (m *ClusterVersionMonitor) SetEventDispatcher(dispatcher EventDispatcher) {
 	m.eventDispatcher = dispatcher
 }
 
+func (m *ClusterVersionMonitor) SetBackgroundRunner(runner BackgroundRunner) {
+	m.background = runner
+}
+
 // Start 启动后台扫描。ctx 取消时退出。
 // scanInterval 建议 30 分钟；resetInterval 建议 24 小时。
 func (m *ClusterVersionMonitor) Start(ctx context.Context, scanInterval, resetInterval time.Duration) {
@@ -47,19 +52,19 @@ func (m *ClusterVersionMonitor) Start(ctx context.Context, scanInterval, resetIn
 		resetInterval = 24 * time.Hour
 	}
 	// 启动立即跑一次，让控制台尽快看到
-	go func() {
-		m.scan(ctx, resetInterval)
+	startBackgroundMonitor(m.background, ctx, func(runCtx context.Context) {
+		m.scan(runCtx, resetInterval)
 		ticker := time.NewTicker(scanInterval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				m.scan(ctx, resetInterval)
+				m.scan(runCtx, resetInterval)
 			}
 		}
-	}()
+	})
 }
 
 func (m *ClusterVersionMonitor) scan(ctx context.Context, resetInterval time.Duration) {

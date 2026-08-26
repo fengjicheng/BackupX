@@ -15,7 +15,12 @@ interface BackupRecordContentsModalProps {
 
 // BackupRecordContentsModal 浏览某次备份捕获的文件清单（只读）。
 // 数据来源于全量备份记录的清单，无需下载归档，秒级展示并支持按路径筛选。
-export function BackupRecordContentsModal({ visible, recordId, onClose, onRestoreSelected }: BackupRecordContentsModalProps) {
+export function BackupRecordContentsModal({
+  visible,
+  recordId,
+  onClose,
+  onRestoreSelected,
+}: BackupRecordContentsModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [contents, setContents] = useState<BackupRecordContents | null>(null)
@@ -63,7 +68,14 @@ export function BackupRecordContentsModal({ visible, recordId, onClose, onRestor
   }, [contents, keyword])
 
   return (
-    <Modal visible={visible} title="备份内容" footer={null} onCancel={onClose} unmountOnExit style={{ width: 760 }}>
+    <Modal
+      visible={visible}
+      title="备份内容"
+      footer={null}
+      onCancel={onClose}
+      unmountOnExit
+      style={{ width: 760 }}
+    >
       {loading ? (
         <Spin style={{ display: 'block', textAlign: 'center', padding: 40 }} />
       ) : error ? (
@@ -76,9 +88,20 @@ export function BackupRecordContentsModal({ visible, recordId, onClose, onRestor
             {contents.basedOnFull ? `；差异备份，清单取自基线全量 #${contents.basedOnFull}` : ''}
           </Typography.Text>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
-            <Input.Search allowClear placeholder="按路径筛选" value={keyword} onChange={setKeyword} style={{ flex: 1 }} />
+            <Input.Search
+              allowClear
+              placeholder="按路径筛选"
+              value={keyword}
+              onChange={setKeyword}
+              style={{ flex: 1 }}
+            />
             {onRestoreSelected && (
-              <Button type="primary" status="warning" disabled={selectedKeys.length === 0} onClick={() => onRestoreSelected(selectedKeys)}>
+              <Button
+                type="primary"
+                status="warning"
+                disabled={selectedKeys.length === 0}
+                onClick={() => onRestoreSelected(selectedKeys)}
+              >
                 恢复选中（{selectedKeys.length}）
               </Button>
             )}
@@ -89,7 +112,11 @@ export function BackupRecordContentsModal({ visible, recordId, onClose, onRestor
             data={filtered}
             rowSelection={
               onRestoreSelected
-                ? { type: 'checkbox', selectedRowKeys: selectedKeys, onChange: (keys) => setSelectedKeys(keys as string[]) }
+                ? {
+                    type: 'checkbox',
+                    selectedRowKeys: selectedKeys,
+                    onChange: (keys) => setSelectedKeys(keys as string[]),
+                  }
                 : undefined
             }
             pagination={{ pageSize: 50, sizeCanChange: false }}
@@ -114,7 +141,8 @@ export function BackupRecordContentsModal({ visible, recordId, onClose, onRestor
                 dataIndex: 'size',
                 width: 120,
                 align: 'right',
-                render: (_: unknown, row: BackupRecordContentEntry) => (row.isDir ? '-' : formatBytes(row.size)),
+                render: (_: unknown, row: BackupRecordContentEntry) =>
+                  row.isDir ? '-' : formatBytes(row.size),
               },
             ]}
           />

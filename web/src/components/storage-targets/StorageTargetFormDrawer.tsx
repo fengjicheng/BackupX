@@ -1,8 +1,34 @@
-import { Alert, Button, Collapse, Divider, Drawer, Input, InputNumber, Select, Space, Switch, Typography } from '@arco-design/web-react'
+import {
+  Alert,
+  Button,
+  Collapse,
+  Divider,
+  Drawer,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Switch,
+  Typography,
+} from '@arco-design/web-react'
 import { useEffect, useMemo, useState } from 'react'
-import { getStorageTargetFieldConfigs, getStorageTargetTypeLabel, isBuiltinType, buildAllTypeOptions } from './field-config'
-import type { StorageConnectionTestResult, StorageTargetDetail, StorageTargetPayload, StorageTargetType } from '../../types/storage-targets'
-import { listRcloneBackends, type RcloneBackendInfo, type RcloneBackendOption } from '../../services/rclone'
+import {
+  getStorageTargetFieldConfigs,
+  getStorageTargetTypeLabel,
+  isBuiltinType,
+  buildAllTypeOptions,
+} from './field-config'
+import type {
+  StorageConnectionTestResult,
+  StorageTargetDetail,
+  StorageTargetPayload,
+  StorageTargetType,
+} from '../../types/storage-targets'
+import {
+  listRcloneBackends,
+  type RcloneBackendInfo,
+  type RcloneBackendOption,
+} from '../../services/rclone'
 
 interface StorageTargetFormDrawerProps {
   visible: boolean
@@ -27,7 +53,14 @@ function createEmptyDraft(type: StorageTargetType = 'local_disk'): StorageTarget
 }
 
 export function StorageTargetFormDrawer({
-  visible, loading, testing, initialValue, onCancel, onSubmit, onTest, onGoogleDriveAuth,
+  visible,
+  loading,
+  testing,
+  initialValue,
+  onCancel,
+  onSubmit,
+  onTest,
+  onGoogleDriveAuth,
 }: StorageTargetFormDrawerProps) {
   const [draft, setDraft] = useState<StorageTargetPayload>(createEmptyDraft())
   const [error, setError] = useState('')
@@ -39,7 +72,10 @@ export function StorageTargetFormDrawer({
   useEffect(() => {
     if (visible && !backendsLoaded) {
       listRcloneBackends()
-        .then((data) => { setRcloneBackends(data); setBackendsLoaded(true) })
+        .then((data) => {
+          setRcloneBackends(data)
+          setBackendsLoaded(true)
+        })
         .catch(() => setBackendsLoaded(true))
     }
   }, [visible, backendsLoaded])
@@ -105,41 +141,80 @@ export function StorageTargetFormDrawer({
   }
 
   async function handleSubmit() {
-    const e = validate(draft); if (e) { setError(e); return }
-    setError(''); await onSubmit(draft, initialValue?.id)
+    const e = validate(draft)
+    if (e) {
+      setError(e)
+      return
+    }
+    setError('')
+    await onSubmit(draft, initialValue?.id)
   }
   async function handleTest() {
-    const e = validate(draft); if (e) { setError(e); return }
-    setError(''); setTestResult(await onTest(draft, initialValue?.id))
+    const e = validate(draft)
+    if (e) {
+      setError(e)
+      return
+    }
+    setError('')
+    setTestResult(await onTest(draft, initialValue?.id))
   }
   async function handleGoogleDriveAuth() {
-    const e = validate(draft); if (e) { setError(e); return }
-    setError(''); await onGoogleDriveAuth(draft, initialValue?.id)
+    const e = validate(draft)
+    if (e) {
+      setError(e)
+      return
+    }
+    setError('')
+    await onGoogleDriveAuth(draft, initialValue?.id)
   }
 
   // 渲染静态字段（内置类型）
   function renderStaticFields() {
     return staticFields.map((field) => {
       const value = draft.config[field.key]
-      const normalized = typeof value === 'boolean' ? value : typeof value === 'string' ? value : field.type === 'switch' ? false : ''
+      const normalized =
+        typeof value === 'boolean'
+          ? value
+          : typeof value === 'string'
+            ? value
+            : field.type === 'switch'
+              ? false
+              : ''
       return (
         <div key={field.key}>
-          <Typography.Text>{field.label}{field.required ? ' *' : ''}</Typography.Text>
+          <Typography.Text>
+            {field.label}
+            {field.required ? ' *' : ''}
+          </Typography.Text>
           {field.type === 'switch' ? (
             <Space align="center" size="medium">
               <Switch checked={Boolean(normalized)} onChange={(v) => updateConfig(field.key, v)} />
-              {field.description && <Typography.Text type="secondary">{field.description}</Typography.Text>}
+              {field.description && (
+                <Typography.Text type="secondary">{field.description}</Typography.Text>
+              )}
             </Space>
           ) : field.type === 'password' ? (
-            <Input.Password value={String(normalized)} placeholder={field.placeholder} onChange={(v) => updateConfig(field.key, v)} />
+            <Input.Password
+              value={String(normalized)}
+              placeholder={field.placeholder}
+              onChange={(v) => updateConfig(field.key, v)}
+            />
           ) : (
-            <Input value={String(normalized)} placeholder={field.placeholder} onChange={(v) => updateConfig(field.key, v)} />
+            <Input
+              value={String(normalized)}
+              placeholder={field.placeholder}
+              onChange={(v) => updateConfig(field.key, v)}
+            />
           )}
           {field.description && field.type !== 'switch' && (
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>{field.description}</Typography.Paragraph>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
+              {field.description}
+            </Typography.Paragraph>
           )}
           {initialValue?.maskedFields?.includes(field.key) && !draft.config[field.key] && (
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>已存在敏感配置，留空则保持不变。</Typography.Paragraph>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
+              已存在敏感配置，留空则保持不变。
+            </Typography.Paragraph>
           )}
         </div>
       )
@@ -150,14 +225,31 @@ export function StorageTargetFormDrawer({
   function renderDynamicOption(opt: RcloneBackendOption) {
     return (
       <div key={opt.key}>
-        <Typography.Text>{opt.key}{opt.required ? ' *' : ''}</Typography.Text>
+        <Typography.Text>
+          {opt.key}
+          {opt.required ? ' *' : ''}
+        </Typography.Text>
         {opt.isPassword ? (
-          <Input.Password value={(draft.config[opt.key] as string) || ''} placeholder={opt.label} onChange={(v) => updateConfig(opt.key, v)} />
+          <Input.Password
+            value={(draft.config[opt.key] as string) || ''}
+            placeholder={opt.label}
+            onChange={(v) => updateConfig(opt.key, v)}
+          />
         ) : (
-          <Input value={(draft.config[opt.key] as string) || ''} placeholder={opt.label} onChange={(v) => updateConfig(opt.key, v)} />
+          <Input
+            value={(draft.config[opt.key] as string) || ''}
+            placeholder={opt.label}
+            onChange={(v) => updateConfig(opt.key, v)}
+          />
         )}
         {opt.label && (
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 2, fontSize: 12 }} ellipsis={{ rows: 2, expandable: true }}>{opt.label}</Typography.Paragraph>
+          <Typography.Paragraph
+            type="secondary"
+            style={{ marginBottom: 0, marginTop: 2, fontSize: 12 }}
+            ellipsis={{ rows: 2, expandable: true }}
+          >
+            {opt.label}
+          </Typography.Paragraph>
         )}
       </div>
     )
@@ -172,14 +264,24 @@ export function StorageTargetFormDrawer({
       <>
         <div>
           <Typography.Text>远端路径</Typography.Text>
-          <Input value={(draft.config.root as string) || ''} placeholder="如 /backups 或 bucket 名" onChange={(v) => updateConfig('root', v)} />
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>远端根路径、桶名或挂载点，留空使用根目录</Typography.Paragraph>
+          <Input
+            value={(draft.config.root as string) || ''}
+            placeholder="如 /backups 或 bucket 名"
+            onChange={(v) => updateConfig('root', v)}
+          />
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
+            远端根路径、桶名或挂载点，留空使用根目录
+          </Typography.Paragraph>
         </div>
         {requiredOptions.map(renderDynamicOption)}
         {optionalOptions.length > 0 && (
           <Collapse bordered={false} style={{ background: 'transparent' }}>
             <Collapse.Item
-              header={<Typography.Text type="secondary">高级配置（{optionalOptions.length} 个可选项）</Typography.Text>}
+              header={
+                <Typography.Text type="secondary">
+                  高级配置（{optionalOptions.length} 个可选项）
+                </Typography.Text>
+              }
               name="advanced"
             >
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -193,14 +295,33 @@ export function StorageTargetFormDrawer({
   }
 
   return (
-    <Drawer width={560} title={initialValue ? '编辑存储目标' : '新建存储目标'} visible={visible} onCancel={onCancel} unmountOnExit={false}>
+    <Drawer
+      width={560}
+      title={initialValue ? '编辑存储目标' : '新建存储目标'}
+      visible={visible}
+      onCancel={onCancel}
+      unmountOnExit={false}
+    >
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {error ? <Alert type="error" content={error} /> : <Alert type="info" content="存储目标提供备份文件的最终去向，请确保服务端网络连通性并通过测试。" />}
-        {testResult && <Alert type={testResult.success ? 'success' : 'warning'} content={testResult.message} />}
+        {error ? (
+          <Alert type="error" content={error} />
+        ) : (
+          <Alert
+            type="info"
+            content="存储目标提供备份文件的最终去向，请确保服务端网络连通性并通过测试。"
+          />
+        )}
+        {testResult && (
+          <Alert type={testResult.success ? 'success' : 'warning'} content={testResult.message} />
+        )}
 
         <div>
           <Typography.Text>名称</Typography.Text>
-          <Input value={draft.name} placeholder="例如：生产环境 MinIO" onChange={(v) => setDraft((c) => ({ ...c, name: v }))} />
+          <Input
+            value={draft.name}
+            placeholder="例如：生产环境 MinIO"
+            onChange={(v) => setDraft((c) => ({ ...c, name: v }))}
+          />
         </div>
 
         <div>
@@ -214,7 +335,8 @@ export function StorageTargetFormDrawer({
               return label.toLowerCase().includes(input.toLowerCase())
             }}
             onChange={(value) => {
-              const config: StorageTargetPayload['config'] = value === 'local_disk' ? { masterRelay: true } : {}
+              const config: StorageTargetPayload['config'] =
+                value === 'local_disk' ? { masterRelay: true } : {}
               setDraft((c) => ({ ...c, type: value as string, config }))
               setTestResult(null)
             }}
@@ -222,7 +344,9 @@ export function StorageTargetFormDrawer({
             {Object.entries(groupedOptions).map(([group, options]) => (
               <Select.OptGroup key={group} label={group}>
                 {options.map((opt) => (
-                  <Select.Option key={opt.value} value={opt.value}>{opt.label}</Select.Option>
+                  <Select.Option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </Select.Option>
                 ))}
               </Select.OptGroup>
             ))}
@@ -231,7 +355,11 @@ export function StorageTargetFormDrawer({
 
         <div>
           <Typography.Text>描述</Typography.Text>
-          <Input.TextArea value={draft.description} placeholder="可选描述" onChange={(v) => setDraft((c) => ({ ...c, description: v }))} />
+          <Input.TextArea
+            value={draft.description}
+            placeholder="可选描述"
+            onChange={(v) => setDraft((c) => ({ ...c, description: v }))}
+          />
         </div>
         <div>
           <Typography.Text>容量配额（GB，0 = 不限制）</Typography.Text>
@@ -251,7 +379,10 @@ export function StorageTargetFormDrawer({
 
         <Space align="center" size="medium">
           <Typography.Text>启用</Typography.Text>
-          <Switch checked={draft.enabled} onChange={(v) => setDraft((c) => ({ ...c, enabled: v }))} />
+          <Switch
+            checked={draft.enabled}
+            onChange={(v) => setDraft((c) => ({ ...c, enabled: v }))}
+          />
         </Space>
 
         <Divider orientation="left">环境配置</Divider>
@@ -266,13 +397,17 @@ export function StorageTargetFormDrawer({
         </div>
 
         <Space>
-          <Button loading={testing} onClick={handleTest}>测试连接</Button>
+          <Button loading={testing} onClick={handleTest}>
+            测试连接
+          </Button>
           {draft.type === 'google_drive' && (
             <Button type="outline" onClick={handleGoogleDriveAuth}>
               {initialValue ? '重新授权 Google Drive' : '发起 Google Drive 授权'}
             </Button>
           )}
-          <Button type="primary" loading={loading} onClick={handleSubmit}>保存</Button>
+          <Button type="primary" loading={loading} onClick={handleSubmit}>
+            保存
+          </Button>
         </Space>
       </Space>
     </Drawer>

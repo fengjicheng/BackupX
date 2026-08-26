@@ -29,9 +29,14 @@ export function Step2DeployOptions({ masterVersion, value, onChange }: Props) {
     <Form layout="vertical" size="default">
       <Form.Item
         label="安装模式"
-        extra={value.mode === 'docker'
-          ? <Text type="warning">Docker Agent 只能访问显式挂载的目录；备份源使用只读 volume，恢复目录需单独授权写入，或改用 systemd。</Text>
-          : undefined}
+        extra={
+          value.mode === 'docker' ? (
+            <Text type="warning">
+              Docker Agent 只能访问显式挂载的目录；备份源使用只读
+              volume，恢复目录需单独授权写入，或改用 systemd。
+            </Text>
+          ) : undefined
+        }
       >
         <Radio.Group
           type="button"

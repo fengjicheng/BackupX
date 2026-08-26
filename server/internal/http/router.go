@@ -399,6 +399,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 
 func requestLogger(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		response.SetLogger(c, logger)
 		c.Next()
 		logger.Info("http request",
 			zap.String("method", c.Request.Method),

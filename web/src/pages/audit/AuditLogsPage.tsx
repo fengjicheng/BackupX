@@ -1,4 +1,16 @@
-import { Button, DatePicker, Input, InputNumber, Message, PageHeader, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
+import {
+  Button,
+  DatePicker,
+  Input,
+  InputNumber,
+  Message,
+  PageHeader,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from '@arco-design/web-react'
 import type { ColumnProps } from '@arco-design/web-react/es/Table'
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -76,9 +88,7 @@ const columns: ColumnProps<AuditLog>[] = [
     title: '分类',
     dataIndex: 'category',
     width: 100,
-    render: (_, record) => (
-      <Tag bordered>{categoryLabels[record.category] ?? record.category}</Tag>
-    ),
+    render: (_, record) => <Tag bordered>{categoryLabels[record.category] ?? record.category}</Tag>,
   },
   {
     title: '操作',
@@ -129,27 +139,30 @@ export function AuditLogsPage() {
   const [retentionDays, setRetentionDays] = useState(0)
   const [savingRetention, setSavingRetention] = useState(false)
 
-  const fetchData = useCallback(async (currentPage: number) => {
-    setLoading(true)
-    try {
-      const result = await listAuditLogs({
-        category: category || undefined,
-        username: username.trim() || undefined,
-        keyword: keyword.trim() || undefined,
-        dateFrom: dateRange?.[0] ? new Date(dateRange[0]).toISOString() : undefined,
-        dateTo: dateRange?.[1] ? new Date(dateRange[1]).toISOString() : undefined,
-        limit: PAGE_SIZE,
-        offset: (currentPage - 1) * PAGE_SIZE,
-      })
-      setLogs(result.items ?? [])
-      setTotal(result.total ?? 0)
-      setError('')
-    } catch (loadError) {
-      setError(resolveErrorMessage(loadError, '加载审计日志失败'))
-    } finally {
-      setLoading(false)
-    }
-  }, [category, username, keyword, dateRange])
+  const fetchData = useCallback(
+    async (currentPage: number) => {
+      setLoading(true)
+      try {
+        const result = await listAuditLogs({
+          category: category || undefined,
+          username: username.trim() || undefined,
+          keyword: keyword.trim() || undefined,
+          dateFrom: dateRange?.[0] ? new Date(dateRange[0]).toISOString() : undefined,
+          dateTo: dateRange?.[1] ? new Date(dateRange[1]).toISOString() : undefined,
+          limit: PAGE_SIZE,
+          offset: (currentPage - 1) * PAGE_SIZE,
+        })
+        setLogs(result.items ?? [])
+        setTotal(result.total ?? 0)
+        setError('')
+      } catch (loadError) {
+        setError(resolveErrorMessage(loadError, '加载审计日志失败'))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [category, username, keyword, dateRange],
+  )
 
   useEffect(() => {
     void fetchData(page)
@@ -172,7 +185,9 @@ export function AuditLogsPage() {
     setSavingRetention(true)
     try {
       await updateSettings({ audit_retention_days: String(retentionDays) })
-      Message.success(retentionDays > 0 ? `已设置：保留最近 ${retentionDays} 天` : '已设置：永久保留')
+      Message.success(
+        retentionDays > 0 ? `已设置：保留最近 ${retentionDays} 天` : '已设置：永久保留',
+      )
     } catch (e) {
       Message.error(resolveErrorMessage(e, '保存保留期失败'))
     } finally {
@@ -228,7 +243,12 @@ export function AuditLogsPage() {
                 suffix="天"
                 placeholder="0=永久"
               />
-              <Button type="primary" size="small" loading={savingRetention} onClick={() => void handleSaveRetention()}>
+              <Button
+                type="primary"
+                size="small"
+                loading={savingRetention}
+                onClick={() => void handleSaveRetention()}
+              >
                 保存
               </Button>
             </Space>
@@ -253,23 +273,42 @@ export function AuditLogsPage() {
           value={username}
           placeholder="用户名"
           onChange={setUsername}
-          onPressEnter={() => { setPage(1); void fetchData(1) }}
+          onPressEnter={() => {
+            setPage(1)
+            void fetchData(1)
+          }}
         />
         <Input
           style={{ width: 240 }}
           value={keyword}
           placeholder="关键词（详情/目标名）"
           onChange={setKeyword}
-          onPressEnter={() => { setPage(1); void fetchData(1) }}
+          onPressEnter={() => {
+            setPage(1)
+            void fetchData(1)
+          }}
         />
         <DatePicker.RangePicker
           showTime
           value={dateRange ?? undefined}
-          onChange={(v) => { setDateRange(v as string[] | null); setPage(1) }}
+          onChange={(v) => {
+            setDateRange(v as string[] | null)
+            setPage(1)
+          }}
         />
-        <Button type="primary" onClick={() => { setPage(1); void fetchData(1) }}>查询</Button>
+        <Button
+          type="primary"
+          onClick={() => {
+            setPage(1)
+            void fetchData(1)
+          }}
+        >
+          查询
+        </Button>
         <Button onClick={handleReset}>重置</Button>
-        <Button type="outline" loading={exporting} onClick={() => void handleExport()}>导出 CSV</Button>
+        <Button type="outline" loading={exporting} onClick={() => void handleExport()}>
+          导出 CSV
+        </Button>
       </Space>
       <Table
         columns={columns}

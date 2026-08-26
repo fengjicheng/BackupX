@@ -1,4 +1,13 @@
-import { Badge, Button, Drawer, Empty, Notification, Space, Tag, Typography } from '@arco-design/web-react'
+import {
+  Badge,
+  Button,
+  Drawer,
+  Empty,
+  Notification,
+  Space,
+  Tag,
+  Typography,
+} from '@arco-design/web-react'
 import { IconNotification } from '../icons'
 import { useEffect, useState } from 'react'
 import { useEventStream, type SystemEvent } from '../../hooks/useEventStream'
@@ -7,7 +16,10 @@ import { formatDateTime } from '../../utils/format'
 
 // EVENT_CONFIG 把后端事件类型映射到 UI 展示。
 // Toast 类型决定颜色；label 中文化；silent=true 则不弹 Toast（仅进历史）。
-const EVENT_CONFIG: Record<string, { label: string; toast?: 'success' | 'error' | 'warning' | 'info'; color: string }> = {
+const EVENT_CONFIG: Record<
+  string,
+  { label: string; toast?: 'success' | 'error' | 'warning' | 'info'; color: string }
+> = {
   backup_success: { label: '备份成功', toast: 'success', color: 'green' },
   backup_failed: { label: '备份失败', toast: 'error', color: 'red' },
   restore_success: { label: '恢复成功', toast: 'success', color: 'green' },
@@ -62,11 +74,7 @@ export function EventCenter() {
   return (
     <>
       <Badge count={unreadCount} dot={unreadCount > 0 && unreadCount <= 0}>
-        <Button
-          type="text"
-          icon={<IconNotification />}
-          onClick={() => setDrawerOpen(true)}
-        >
+        <Button type="text" icon={<IconNotification />} onClick={() => setDrawerOpen(true)}>
           {unreadCount > 0 ? `${unreadCount}` : ''}
         </Button>
       </Badge>
@@ -85,7 +93,9 @@ export function EventCenter() {
         onCancel={() => setDrawerOpen(false)}
         footer={
           <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-            <Button size="small" onClick={clear} disabled={events.length === 0}>清空</Button>
+            <Button size="small" onClick={clear} disabled={events.length === 0}>
+              清空
+            </Button>
           </Space>
         }
       >
@@ -108,15 +118,27 @@ export function EventCenter() {
                 >
                   <Space style={{ justifyContent: 'space-between', width: '100%' }}>
                     <Space>
-                      <Tag color={config?.color ?? 'gray'} bordered size="small">{labelFor(e.type)}</Tag>
-                      <Typography.Text bold style={{ fontSize: 13 }}>{e.title}</Typography.Text>
+                      <Tag color={config?.color ?? 'gray'} bordered size="small">
+                        {labelFor(e.type)}
+                      </Tag>
+                      <Typography.Text bold style={{ fontSize: 13 }}>
+                        {e.title}
+                      </Typography.Text>
                     </Space>
                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                       {formatDateTime(e.timestamp)}
                     </Typography.Text>
                   </Space>
                   {e.body ? (
-                    <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 4, marginBottom: 0, whiteSpace: 'pre-wrap' }}>
+                    <Typography.Paragraph
+                      type="secondary"
+                      style={{
+                        fontSize: 12,
+                        marginTop: 4,
+                        marginBottom: 0,
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
                       {e.body}
                     </Typography.Paragraph>
                   ) : null}

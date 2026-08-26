@@ -1,4 +1,14 @@
-import { Button, Card, Empty, Message, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
+import {
+  Button,
+  Card,
+  Empty,
+  Message,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BackupRecordLogDrawer } from '../../components/backup-records/BackupRecordLogDrawer'
@@ -40,7 +50,10 @@ export function BackupRecordsPage() {
   const selectedStatus = (searchParams.get('status') ?? '') as BackupRecordStatus | ''
 
   const taskOptions = useMemo(
-    () => [{ label: '全部任务', value: 0 }, ...tasks.map((item) => ({ label: item.name, value: item.id }))],
+    () => [
+      { label: '全部任务', value: 0 },
+      ...tasks.map((item) => ({ label: item.name, value: item.id })),
+    ],
     [tasks],
   )
 
@@ -93,13 +106,32 @@ export function BackupRecordsPage() {
       title: '任务 / 状态',
       dataIndex: 'taskName',
       render: (_: unknown, record: BackupRecordSummary) => {
-        const statusLabel = record.status === 'success' ? '成功' : record.status === 'failed' ? '失败' : record.status === 'running' ? '执行中' : record.status
+        const statusLabel =
+          record.status === 'success'
+            ? '成功'
+            : record.status === 'failed'
+              ? '失败'
+              : record.status === 'running'
+                ? '执行中'
+                : record.status
         return (
           <Space direction="vertical" size={2}>
             <Typography.Text bold>{record.taskName}</Typography.Text>
             <Space>
-              {statusLabel ? <Tag color={getRecordStatusColor(record.status)} bordered>{statusLabel}</Tag> : <span style={{ color: 'var(--color-text-3)' }}>-</span>}
-              {record.storageTargetName ? <Tag color="arcoblue" bordered>{record.storageTargetName}</Tag> : <span style={{ color: 'var(--color-text-3)' }}>-</span>}
+              {statusLabel ? (
+                <Tag color={getRecordStatusColor(record.status)} bordered>
+                  {statusLabel}
+                </Tag>
+              ) : (
+                <span style={{ color: 'var(--color-text-3)' }}>-</span>
+              )}
+              {record.storageTargetName ? (
+                <Tag color="arcoblue" bordered>
+                  {record.storageTargetName}
+                </Tag>
+              ) : (
+                <span style={{ color: 'var(--color-text-3)' }}>-</span>
+              )}
             </Space>
           </Space>
         )
@@ -112,9 +144,21 @@ export function BackupRecordsPage() {
         <Space direction="vertical" size={2}>
           <Space size={4}>
             <Typography.Text>{record.fileName || '-'}</Typography.Text>
-            {record.locked && <Tag color="orange" size="small" bordered>已锁定</Tag>}
-            {record.backupKind === 'differential' && <Tag color="purple" size="small" bordered>差异</Tag>}
-            {record.backupKind === 'repository' && <Tag color="blue" size="small" bordered>CDC</Tag>}
+            {record.locked && (
+              <Tag color="orange" size="small" bordered>
+                已锁定
+              </Tag>
+            )}
+            {record.backupKind === 'differential' && (
+              <Tag color="purple" size="small" bordered>
+                差异
+              </Tag>
+            )}
+            {record.backupKind === 'repository' && (
+              <Tag color="blue" size="small" bordered>
+                CDC
+              </Tag>
+            )}
           </Space>
           <Typography.Text type="secondary">{formatBytes(record.fileSize)}</Typography.Text>
           {record.checksum && (
@@ -151,7 +195,11 @@ export function BackupRecordsPage() {
       width: 180,
       render: (_: unknown, record: BackupRecordSummary) => (
         <Space size={4}>
-          <Button size="small" type="text" onClick={() => updateSearchParam('recordId', String(record.id))}>
+          <Button
+            size="small"
+            type="text"
+            onClick={() => updateSearchParam('recordId', String(record.id))}
+          >
             查看日志
           </Button>
           {record.status === 'success' && (
@@ -183,30 +231,57 @@ export function BackupRecordsPage() {
         <Space wrap>
           <div>
             <Typography.Text>任务筛选</Typography.Text>
-            <Select style={{ width: 240 }} value={selectedTaskId ?? 0} options={taskOptions} onChange={(value) => updateSearchParam('taskId', Number(value) > 0 ? String(value) : undefined)} />
+            <Select
+              style={{ width: 240 }}
+              value={selectedTaskId ?? 0}
+              options={taskOptions}
+              onChange={(value) =>
+                updateSearchParam('taskId', Number(value) > 0 ? String(value) : undefined)
+              }
+            />
           </div>
           <div>
             <Typography.Text>状态筛选</Typography.Text>
-            <Select style={{ width: 180 }} value={selectedStatus} options={statusOptions} onChange={(value) => updateSearchParam('status', value ? String(value) : undefined)} />
+            <Select
+              style={{ width: 180 }}
+              value={selectedStatus}
+              options={statusOptions}
+              onChange={(value) => updateSearchParam('status', value ? String(value) : undefined)}
+            />
           </div>
-          <Button type="outline" onClick={() => {
-            const next = new URLSearchParams(searchParams)
-            next.delete('taskId')
-            next.delete('status')
-            setSearchParams(next, { replace: true })
-          }}>
+          <Button
+            type="outline"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('taskId')
+              next.delete('status')
+              setSearchParams(next, { replace: true })
+            }}
+          >
             重置筛选
           </Button>
         </Space>
       </Card>
 
-      {error ? <Card><Typography.Text type="error">{error}</Typography.Text></Card> : null}
+      {error ? (
+        <Card>
+          <Typography.Text type="error">{error}</Typography.Text>
+        </Card>
+      ) : null}
 
       <Card>
         {records.length === 0 && !loading ? (
           <Empty description="暂无备份记录" />
         ) : (
-          <Table rowKey="id" loading={loading} columns={columns} data={records} pagination={{ pageSize: 10 }} stripe noDataElement={<Empty description="暂无符合条件的备份记录" />} />
+          <Table
+            rowKey="id"
+            loading={loading}
+            columns={columns}
+            data={records}
+            pagination={{ pageSize: 10 }}
+            stripe
+            noDataElement={<Empty description="暂无符合条件的备份记录" />}
+          />
         )}
       </Card>
 

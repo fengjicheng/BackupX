@@ -1,6 +1,29 @@
-import { Alert, Button, Card, Empty, Form, Input, InputNumber, Message, Modal, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Message,
+  Modal,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
-import { applyTaskTemplate, deleteTaskTemplate, getTaskTemplate, listTaskTemplates, type TaskTemplateApplyResult, type TaskTemplateSummary, type TaskTemplateVariables } from '../../services/task-templates'
+import {
+  applyTaskTemplate,
+  deleteTaskTemplate,
+  getTaskTemplate,
+  listTaskTemplates,
+  type TaskTemplateApplyResult,
+  type TaskTemplateSummary,
+  type TaskTemplateVariables,
+} from '../../services/task-templates'
 import { useAuthStore } from '../../stores/auth'
 import { resolveErrorMessage } from '../../utils/error'
 import { canWrite } from '../../utils/permissions'
@@ -48,14 +71,23 @@ export function TaskTemplatesPage() {
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+  }, [load])
 
   async function openApply(item: TaskTemplateSummary) {
     try {
       const detail = await getTaskTemplate(item.id)
       setApplyTemplateId(item.id)
       setApplyTemplateName(item.name)
-      setRows([newRow({ sourcePath: detail.payload.sourcePath, dbHost: detail.payload.dbHost, dbName: detail.payload.dbName, tags: detail.payload.tags })])
+      setRows([
+        newRow({
+          sourcePath: detail.payload.sourcePath,
+          dbHost: detail.payload.dbHost,
+          dbName: detail.payload.dbName,
+          tags: detail.payload.tags,
+        }),
+      ])
       setApplyResult(null)
       setApplyVisible(true)
     } catch (e) {
@@ -108,7 +140,8 @@ export function TaskTemplatesPage() {
       <div>
         <Typography.Title heading={4}>任务模板</Typography.Title>
         <Typography.Paragraph type="secondary">
-          保存常用任务参数预设，一次性批量创建任务。适合大规模场景（100+ 主机）。在任务表单点击"保存为模板"可创建模板。
+          保存常用任务参数预设，一次性批量创建任务。适合大规模场景（100+
+          主机）。在任务表单点击"保存为模板"可创建模板。
         </Typography.Paragraph>
       </div>
 
@@ -125,21 +158,55 @@ export function TaskTemplatesPage() {
             stripe
             pagination={false}
             columns={[
-              { title: '名称', render: (_: unknown, r: TaskTemplateSummary) => (
-                <Space direction="vertical" size={2}>
-                  <Typography.Text bold>{r.name}</Typography.Text>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>{r.description || '-'}</Typography.Text>
-                </Space>
-              )},
-              { title: '类型', dataIndex: 'taskType', render: (v: string) => <Tag color="arcoblue" bordered>{v.toUpperCase()}</Tag> },
+              {
+                title: '名称',
+                render: (_: unknown, r: TaskTemplateSummary) => (
+                  <Space direction="vertical" size={2}>
+                    <Typography.Text bold>{r.name}</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {r.description || '-'}
+                    </Typography.Text>
+                  </Space>
+                ),
+              },
+              {
+                title: '类型',
+                dataIndex: 'taskType',
+                render: (v: string) => (
+                  <Tag color="arcoblue" bordered>
+                    {v.toUpperCase()}
+                  </Tag>
+                ),
+              },
               { title: '创建者', dataIndex: 'createdBy', render: (v: string) => v || '-' },
-              { title: '创建时间', dataIndex: 'createdAt', render: (v: string) => formatDateTime(v) },
-              { title: '操作', width: 240, render: (_: unknown, r: TaskTemplateSummary) => (
-                <Space>
-                  {writable && <Button size="small" type="primary" onClick={() => void openApply(r)}>应用</Button>}
-                  {writable && <Button size="small" type="text" status="danger" onClick={() => void handleDelete(r)}>删除</Button>}
-                </Space>
-              )},
+              {
+                title: '创建时间',
+                dataIndex: 'createdAt',
+                render: (v: string) => formatDateTime(v),
+              },
+              {
+                title: '操作',
+                width: 240,
+                render: (_: unknown, r: TaskTemplateSummary) => (
+                  <Space>
+                    {writable && (
+                      <Button size="small" type="primary" onClick={() => void openApply(r)}>
+                        应用
+                      </Button>
+                    )}
+                    {writable && (
+                      <Button
+                        size="small"
+                        type="text"
+                        status="danger"
+                        onClick={() => void handleDelete(r)}
+                      >
+                        删除
+                      </Button>
+                    )}
+                  </Space>
+                ),
+              },
             ]}
           />
         )}
@@ -162,8 +229,25 @@ export function TaskTemplatesPage() {
             data={applyResult}
             columns={[
               { title: '任务名', dataIndex: 'name' },
-              { title: '结果', dataIndex: 'success', render: (v: boolean) => v ? <Tag color="green" bordered>成功</Tag> : <Tag color="red" bordered>失败</Tag> },
-              { title: '任务 ID', dataIndex: 'taskId', render: (v?: number) => v ? `#${v}` : '-' },
+              {
+                title: '结果',
+                dataIndex: 'success',
+                render: (v: boolean) =>
+                  v ? (
+                    <Tag color="green" bordered>
+                      成功
+                    </Tag>
+                  ) : (
+                    <Tag color="red" bordered>
+                      失败
+                    </Tag>
+                  ),
+              },
+              {
+                title: '任务 ID',
+                dataIndex: 'taskId',
+                render: (v?: number) => (v ? `#${v}` : '-'),
+              },
               { title: '错误', dataIndex: 'error', render: (v?: string) => v || '-' },
             ]}
           />
@@ -176,24 +260,78 @@ export function TaskTemplatesPage() {
               data={rows}
               size="small"
               columns={[
-                { title: '任务名 *', width: 160, render: (_: unknown, r: VariableRow, idx: number) => (
-                  <Input value={r.name} onChange={(v) => setRows((list) => list.map((x, i) => i === idx ? { ...x, name: v } : x))} placeholder="如：prod-web-1" />
-                )},
-                { title: '源路径', width: 200, render: (_: unknown, r: VariableRow, idx: number) => (
-                  <Input value={r.sourcePath} onChange={(v) => setRows((list) => list.map((x, i) => i === idx ? { ...x, sourcePath: v } : x))} placeholder="/var/www" />
-                )},
-                { title: '数据库主机', width: 140, render: (_: unknown, r: VariableRow, idx: number) => (
-                  <Input value={r.dbHost} onChange={(v) => setRows((list) => list.map((x, i) => i === idx ? { ...x, dbHost: v } : x))} placeholder="host-1" />
-                )},
-                { title: '数据库名', width: 140, render: (_: unknown, r: VariableRow, idx: number) => (
-                  <Input value={r.dbName} onChange={(v) => setRows((list) => list.map((x, i) => i === idx ? { ...x, dbName: v } : x))} />
-                )},
-                { title: '', width: 60, render: (_: unknown, _r: VariableRow, idx: number) => (
-                  <Button size="mini" type="text" status="danger" onClick={() => setRows((list) => list.filter((_, i) => i !== idx))}>删除</Button>
-                )},
+                {
+                  title: '任务名 *',
+                  width: 160,
+                  render: (_: unknown, r: VariableRow, idx: number) => (
+                    <Input
+                      value={r.name}
+                      onChange={(v) =>
+                        setRows((list) => list.map((x, i) => (i === idx ? { ...x, name: v } : x)))
+                      }
+                      placeholder="如：prod-web-1"
+                    />
+                  ),
+                },
+                {
+                  title: '源路径',
+                  width: 200,
+                  render: (_: unknown, r: VariableRow, idx: number) => (
+                    <Input
+                      value={r.sourcePath}
+                      onChange={(v) =>
+                        setRows((list) =>
+                          list.map((x, i) => (i === idx ? { ...x, sourcePath: v } : x)),
+                        )
+                      }
+                      placeholder="/var/www"
+                    />
+                  ),
+                },
+                {
+                  title: '数据库主机',
+                  width: 140,
+                  render: (_: unknown, r: VariableRow, idx: number) => (
+                    <Input
+                      value={r.dbHost}
+                      onChange={(v) =>
+                        setRows((list) => list.map((x, i) => (i === idx ? { ...x, dbHost: v } : x)))
+                      }
+                      placeholder="host-1"
+                    />
+                  ),
+                },
+                {
+                  title: '数据库名',
+                  width: 140,
+                  render: (_: unknown, r: VariableRow, idx: number) => (
+                    <Input
+                      value={r.dbName}
+                      onChange={(v) =>
+                        setRows((list) => list.map((x, i) => (i === idx ? { ...x, dbName: v } : x)))
+                      }
+                    />
+                  ),
+                },
+                {
+                  title: '',
+                  width: 60,
+                  render: (_: unknown, _r: VariableRow, idx: number) => (
+                    <Button
+                      size="mini"
+                      type="text"
+                      status="danger"
+                      onClick={() => setRows((list) => list.filter((_, i) => i !== idx))}
+                    >
+                      删除
+                    </Button>
+                  ),
+                },
               ]}
             />
-            <Button type="outline" long onClick={() => setRows((list) => [...list, newRow()])}>+ 新增一行</Button>
+            <Button type="outline" long onClick={() => setRows((list) => [...list, newRow()])}>
+              + 新增一行
+            </Button>
           </Space>
         )}
       </Modal>

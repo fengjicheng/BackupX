@@ -172,7 +172,7 @@ func (s *NotificationService) NotifyBackupResult(ctx context.Context, event Back
 	if success {
 		eventType = model.NotificationEventBackupSuccess
 	}
-	items, err := s.collectSubscribers(ctx, eventType, success)
+	items, err := s.collectSubscribers(ctx, eventType)
 	if err != nil {
 		return err
 	}
@@ -194,9 +194,7 @@ func (s *NotificationService) DispatchEvent(ctx context.Context, eventType strin
 	if s.broadcaster != nil {
 		_ = s.broadcaster.Publish(ctx, eventType, title, body, fields)
 	}
-	// 将 fallback 布尔用于旧语义场景（backup_success / backup_failed）。
-	fallbackSuccess := eventType == model.NotificationEventBackupSuccess
-	items, err := s.collectSubscribers(ctx, eventType, fallbackSuccess)
+	items, err := s.collectSubscribers(ctx, eventType)
 	if err != nil {
 		return err
 	}
@@ -254,7 +252,7 @@ func (s *NotificationService) sendFirstByType(ctx context.Context, notificationT
 
 // collectSubscribers 按事件类型收集启用的订阅者。
 // 列出启用通知后按事件类型再过滤（避免引入新 repository 方法）。
-func (s *NotificationService) collectSubscribers(ctx context.Context, eventType string, fallbackSuccess bool) ([]model.Notification, error) {
+func (s *NotificationService) collectSubscribers(ctx context.Context, eventType string) ([]model.Notification, error) {
 	all, err := s.notifications.List(ctx)
 	if err != nil {
 		return nil, err
@@ -284,8 +282,6 @@ func (s *NotificationService) collectSubscribers(ctx context.Context, eventType 
 				// 其他事件类型必须显式订阅才推送
 				continue
 			}
-			// 额外校验 fallbackSuccess 参数，保持历史行为一致
-			_ = fallbackSuccess
 		}
 		matched = append(matched, item)
 	}

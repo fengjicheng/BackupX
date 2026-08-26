@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"backupx/server/internal/apperror"
 	"backupx/server/internal/config"
 	"backupx/server/internal/database"
 	"backupx/server/internal/logger"
@@ -13,6 +15,34 @@ import (
 	"backupx/server/internal/repository"
 	"backupx/server/internal/storage/codec"
 )
+
+type backupTaskSchedulerStub struct {
+	removeErr   error
+	syncErr     error
+	removedIDs  []uint
+	syncedTasks []model.BackupTask
+}
+
+func (s *backupTaskSchedulerStub) SyncTask(_ context.Context, task *model.BackupTask) error {
+	if task != nil {
+		s.syncedTasks = append(s.syncedTasks, *task)
+	}
+	return s.syncErr
+}
+
+func (s *backupTaskSchedulerStub) RemoveTask(_ context.Context, taskID uint) error {
+	s.removedIDs = append(s.removedIDs, taskID)
+	return s.removeErr
+}
+
+type failingDeleteBackupTaskRepository struct {
+	repository.BackupTaskRepository
+	deleteErr error
+}
+
+func (r *failingDeleteBackupTaskRepository) Delete(context.Context, uint) error {
+	return r.deleteErr
+}
 
 func newBackupTaskServiceForTest(t *testing.T) (*BackupTaskService, repository.StorageTargetRepository, repository.BackupTaskRepository) {
 	t.Helper()
@@ -24,6 +54,7 @@ func newBackupTaskServiceForTest(t *testing.T) (*BackupTaskService, repository.S
 	if err != nil {
 		t.Fatalf("database.Open returned error: %v", err)
 	}
+	closeTestDatabase(t, db)
 	targets := repository.NewStorageTargetRepository(db)
 	tasks := repository.NewBackupTaskRepository(db)
 	service := NewBackupTaskService(tasks, targets, codec.NewConfigCipher("task-service-secret"))
@@ -135,6 +166,76 @@ func TestBackupTaskServiceCreateAndGet(t *testing.T) {
 	}
 	if loaded.StorageTargetName != "local" {
 		t.Fatalf("expected storage target name local, got %s", loaded.StorageTargetName)
+	}
+}
+
+func TestBackupTaskServiceDeleteKeepsTaskWhenUnscheduleFails(t *testing.T) {
+	ctx := context.Background()
+	service, targets, tasks := newBackupTaskServiceForTest(t)
+	if err := targets.Create(ctx, &model.StorageTarget{Name: "local", Type: "local_disk", Enabled: true, ConfigCiphertext: "ciphertext", ConfigVersion: 1, LastTestStatus: "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	created, err := service.Create(ctx, BackupTaskUpsertInput{
+		Name: "unschedule-failure", Type: "file", Enabled: true, SourcePath: "/srv/data",
+		StorageTargetID: 1, RetentionDays: 7, Compression: "gzip", MaxBackups: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler := &backupTaskSchedulerStub{removeErr: errors.New("remove failed")}
+	service.SetScheduler(scheduler)
+
+	if _, err := service.Delete(ctx, created.ID); err == nil {
+		t.Fatal("Delete should fail when the scheduler cannot remove the task")
+	} else {
+		var appErr *apperror.AppError
+		if !errors.As(err, &appErr) || appErr.Code != "BACKUP_TASK_UNSCHEDULE_FAILED" {
+			t.Fatalf("Delete error = %#v", err)
+		}
+	}
+	stored, err := tasks.FindByID(ctx, created.ID)
+	if err != nil || stored == nil {
+		t.Fatalf("task should remain after unschedule failure: task=%#v err=%v", stored, err)
+	}
+	if len(scheduler.removedIDs) != 1 || len(scheduler.syncedTasks) != 1 {
+		t.Fatalf("scheduler calls = remove:%v sync:%d", scheduler.removedIDs, len(scheduler.syncedTasks))
+	}
+}
+
+func TestBackupTaskServiceDeleteRestoresScheduleWhenPersistenceFails(t *testing.T) {
+	ctx := context.Background()
+	service, targets, tasks := newBackupTaskServiceForTest(t)
+	if err := targets.Create(ctx, &model.StorageTarget{Name: "local", Type: "local_disk", Enabled: true, ConfigCiphertext: "ciphertext", ConfigVersion: 1, LastTestStatus: "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	created, err := service.Create(ctx, BackupTaskUpsertInput{
+		Name: "delete-failure", Type: "file", Enabled: true, SourcePath: "/srv/data",
+		StorageTargetID: 1, RetentionDays: 7, Compression: "gzip", MaxBackups: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.tasks = &failingDeleteBackupTaskRepository{
+		BackupTaskRepository: tasks,
+		deleteErr:            errors.New("database delete failed"),
+	}
+	scheduler := &backupTaskSchedulerStub{}
+	service.SetScheduler(scheduler)
+
+	if _, err := service.Delete(ctx, created.ID); err == nil {
+		t.Fatal("Delete should fail when persistence fails")
+	} else {
+		var appErr *apperror.AppError
+		if !errors.As(err, &appErr) || appErr.Code != "BACKUP_TASK_DELETE_FAILED" {
+			t.Fatalf("Delete error = %#v", err)
+		}
+	}
+	if len(scheduler.removedIDs) != 1 || len(scheduler.syncedTasks) != 1 || scheduler.syncedTasks[0].ID != created.ID {
+		t.Fatalf("scheduler rollback calls = remove:%v sync:%#v", scheduler.removedIDs, scheduler.syncedTasks)
+	}
+	stored, err := tasks.FindByID(ctx, created.ID)
+	if err != nil || stored == nil {
+		t.Fatalf("task should remain after persistence failure: task=%#v err=%v", stored, err)
 	}
 }
 

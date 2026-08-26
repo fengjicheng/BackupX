@@ -24,21 +24,30 @@ export interface UpdateCheckResult {
 }
 
 export async function fetchSystemInfo() {
-  const response = await http.get<{ code: string; message: string; data: SystemInfo }>('/system/info')
+  const response = await http.get<{ code: string; message: string; data: SystemInfo }>(
+    '/system/info',
+  )
   return response.data.data
 }
 
 export async function checkUpdate() {
-  const response = await http.get<{ code: string; message: string; data: UpdateCheckResult }>('/system/update-check')
+  const response = await http.get<{ code: string; message: string; data: UpdateCheckResult }>(
+    '/system/update-check',
+  )
   return response.data.data
 }
 
 export async function fetchSettings() {
-  const response = await http.get<{ code: string; message: string; data: Record<string, string> }>('/settings')
+  const response = await http.get<{ code: string; message: string; data: Record<string, string> }>(
+    '/settings',
+  )
   return response.data.data
 }
 
 export async function updateSettings(settings: Record<string, string>) {
-  const response = await http.put<{ code: string; message: string; data: Record<string, string> }>('/settings', settings)
+  const response = await http.put<{ code: string; message: string; data: Record<string, string> }>(
+    '/settings',
+    settings,
+  )
   return response.data.data
 }

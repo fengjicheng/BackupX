@@ -24,7 +24,14 @@ export function buildSourceServerOptions(nodes: NodeSummary[] = []) {
   ]
 }
 
-export function SourceServerSelector({ nodeId, nodePoolTag, localNodeId, nodes, onNodeChange, onNodePoolTagChange }: SourceServerSelectorProps) {
+export function SourceServerSelector({
+  nodeId,
+  nodePoolTag,
+  localNodeId,
+  nodes,
+  onNodeChange,
+  onNodePoolTagChange,
+}: SourceServerSelectorProps) {
   const options = useMemo(() => buildSourceServerOptions(nodes), [nodes])
   const selectedNode = nodes?.find((node) => node.id === nodeId)
   const isRemote = nodeId > 0 && nodeId !== localNodeId
@@ -33,7 +40,11 @@ export function SourceServerSelector({ nodeId, nodePoolTag, localNodeId, nodes, 
     <>
       <div>
         <Typography.Text>源服务器</Typography.Text>
-        <Select value={nodeId} options={options} onChange={(value) => onNodeChange(Number(value ?? 0))} />
+        <Select
+          value={nodeId}
+          options={options}
+          onChange={(value) => onNodeChange(Number(value ?? 0))}
+        />
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
           {isRemote
             ? `源路径与数据库在 ${selectedNode?.name ?? '远程服务器'} 上解析，由 Agent 就地生成备份。网络存储由 Agent 直传；启用 Master 中转的本地磁盘目标会通过认证连接写入中央目录。`
@@ -49,7 +60,8 @@ export function SourceServerSelector({ nodeId, nodePoolTag, localNodeId, nodes, 
           onChange={onNodePoolTagChange}
         />
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
-          仅在选择 Master 本机时可填写；系统从 Labels 命中该标签的在线 Agent 中选择当前运行任务最少的一台。
+          仅在选择 Master 本机时可填写；系统从 Labels 命中该标签的在线 Agent
+          中选择当前运行任务最少的一台。
         </Typography.Paragraph>
       </div>
     </>

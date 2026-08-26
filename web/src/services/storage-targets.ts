@@ -34,7 +34,10 @@ export async function createStorageTarget(payload: StorageTargetPayload) {
 }
 
 export async function updateStorageTarget(id: number, payload: StorageTargetPayload) {
-  const response = await http.put<ApiEnvelope<StorageTargetDetail>>(`/storage-targets/${id}`, payload)
+  const response = await http.put<ApiEnvelope<StorageTargetDetail>>(
+    `/storage-targets/${id}`,
+    payload,
+  )
   return unwrap(response.data)
 }
 
@@ -44,26 +47,39 @@ export async function deleteStorageTarget(id: number) {
 }
 
 export async function testStorageTarget(payload: StorageTargetPayload) {
-  const response = await http.post<ApiEnvelope<StorageConnectionTestResult>>('/storage-targets/test', payload, { timeout: 30000 })
+  const response = await http.post<ApiEnvelope<StorageConnectionTestResult>>(
+    '/storage-targets/test',
+    payload,
+    { timeout: 30000 },
+  )
   return unwrap(response.data)
 }
 
 export async function testSavedStorageTarget(id: number) {
-  const response = await http.post<ApiEnvelope<StorageConnectionTestResult>>(`/storage-targets/${id}/test`, undefined, { timeout: 30000 })
+  const response = await http.post<ApiEnvelope<StorageConnectionTestResult>>(
+    `/storage-targets/${id}/test`,
+    undefined,
+    { timeout: 30000 },
+  )
   return unwrap(response.data)
 }
 
 export async function startGoogleDriveAuth(payload: StorageTargetPayload, targetId?: number) {
-  const response = await http.post<ApiEnvelope<GoogleDriveAuthStartResult>>('/storage-targets/google-drive/auth-url', {
-    ...payload,
-    targetId,
-  })
+  const response = await http.post<ApiEnvelope<GoogleDriveAuthStartResult>>(
+    '/storage-targets/google-drive/auth-url',
+    {
+      ...payload,
+      targetId,
+    },
+  )
   return unwrap(response.data)
 }
 
 export async function completeGoogleDriveAuth(queryString: string) {
   const suffix = queryString.startsWith('?') ? queryString : `?${queryString}`
-  const response = await http.get<ApiEnvelope<GoogleDriveCallbackResult>>(`/storage-targets/google-drive/callback${suffix}`)
+  const response = await http.get<ApiEnvelope<GoogleDriveCallbackResult>>(
+    `/storage-targets/google-drive/callback${suffix}`,
+  )
   return unwrap(response.data)
 }
 

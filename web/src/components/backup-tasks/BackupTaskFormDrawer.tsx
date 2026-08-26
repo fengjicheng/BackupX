@@ -1,10 +1,32 @@
-import { Alert, Button, Divider, Drawer, Input, InputNumber, Select, Space, Steps, Switch, Typography, Grid } from '@arco-design/web-react'
+import {
+  Alert,
+  Button,
+  Divider,
+  Drawer,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Steps,
+  Switch,
+  Typography,
+  Grid,
+} from '@arco-design/web-react'
 import { IconDelete, IconPlus } from '../icons'
 import { useEffect, useMemo, useState } from 'react'
 import { CronInput } from '../CronInput'
-import type { StorageTargetDetail, StorageTargetPayload, StorageTargetSummary } from '../../types/storage-targets'
+import type {
+  StorageTargetDetail,
+  StorageTargetPayload,
+  StorageTargetSummary,
+} from '../../types/storage-targets'
 import type { StorageConnectionTestResult } from '../../types/storage-targets'
-import type { BackupMode, BackupTaskDetail, BackupTaskPayload, BackupTaskType } from '../../types/backup-tasks'
+import type {
+  BackupMode,
+  BackupTaskDetail,
+  BackupTaskPayload,
+  BackupTaskType,
+} from '../../types/backup-tasks'
 import type { NodeSummary } from '../../types/nodes'
 import { DatabasePicker } from '../common/DatabasePicker'
 import { DirectoryPicker } from '../common/DirectoryPicker'
@@ -37,7 +59,10 @@ interface BackupTaskFormDrawerProps {
   onCancel: () => void
   onSubmit: (value: BackupTaskPayload, taskId?: number) => Promise<void>
   onCreateStorageTarget?: (value: StorageTargetPayload) => Promise<StorageTargetDetail>
-  onTestStorageTarget?: (value: StorageTargetPayload, targetId?: number) => Promise<StorageConnectionTestResult>
+  onTestStorageTarget?: (
+    value: StorageTargetPayload,
+    targetId?: number,
+  ) => Promise<StorageConnectionTestResult>
   onGoogleDriveAuth?: (value: StorageTargetPayload, targetId?: number) => Promise<void>
   onStorageTargetCreated?: () => Promise<void>
 }
@@ -85,7 +110,21 @@ function createEmptyDraft(storageTargets?: StorageTargetSummary[]): BackupTaskPa
   }
 }
 
-export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTargets, localNodeId, nodes, allTasks, onCancel, onSubmit, onCreateStorageTarget, onTestStorageTarget, onGoogleDriveAuth, onStorageTargetCreated }: BackupTaskFormDrawerProps) {
+export function BackupTaskFormDrawer({
+  visible,
+  loading,
+  initialValue,
+  storageTargets,
+  localNodeId,
+  nodes,
+  allTasks,
+  onCancel,
+  onSubmit,
+  onCreateStorageTarget,
+  onTestStorageTarget,
+  onGoogleDriveAuth,
+  onStorageTargetCreated,
+}: BackupTaskFormDrawerProps) {
   const [draft, setDraft] = useState<BackupTaskPayload>(createEmptyDraft())
   const [excludePatternsText, setExcludePatternsText] = useState('')
   const [currentStep, setCurrentStep] = useState(0)
@@ -108,17 +147,19 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
       return
     }
 
-    const editTargetIds = initialValue.storageTargetIds?.length > 0
-      ? initialValue.storageTargetIds
-      : initialValue.storageTargetId > 0
-        ? [initialValue.storageTargetId]
-        : []
+    const editTargetIds =
+      initialValue.storageTargetIds?.length > 0
+        ? initialValue.storageTargetIds
+        : initialValue.storageTargetId > 0
+          ? [initialValue.storageTargetId]
+          : []
     // 编辑时：sourcePaths 优先，为空回退 sourcePath
-    const editSourcePaths = initialValue.sourcePaths?.length > 0
-      ? initialValue.sourcePaths
-      : initialValue.sourcePath
-        ? [initialValue.sourcePath]
-        : ['']
+    const editSourcePaths =
+      initialValue.sourcePaths?.length > 0
+        ? initialValue.sourcePaths
+        : initialValue.sourcePath
+          ? [initialValue.sourcePath]
+          : ['']
     setDraft({
       name: initialValue.name,
       type: initialValue.type,
@@ -163,20 +204,17 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
     setError('')
   }, [initialValue, storageTargets, visible])
 
-  const storageTargetOptions = useMemo(
-    () => {
-      const sorted = [...storageTargets].sort((a, b) => {
-        if (a.starred !== b.starred) return a.starred ? -1 : 1
-        return 0
-      })
-      return sorted.map((item) => ({
-        label: <StorageTargetName name={item.name} starred={item.starred} />,
-        value: item.id,
-        disabled: !item.enabled,
-      }))
-    },
-    [storageTargets],
-  )
+  const storageTargetOptions = useMemo(() => {
+    const sorted = [...storageTargets].sort((a, b) => {
+      if (a.starred !== b.starred) return a.starred ? -1 : 1
+      return 0
+    })
+    return sorted.map((item) => ({
+      label: <StorageTargetName name={item.name} starred={item.starred} />,
+      value: item.id,
+      disabled: !item.enabled,
+    }))
+  }, [storageTargets])
 
   function updateDraft(patch: Partial<BackupTaskPayload>) {
     setDraft((current) => ({ ...current, ...patch }))
@@ -196,9 +234,13 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
       dbName: isDatabaseBackupTask(value) ? current.dbName : '',
       dbPath: value === 'sqlite' ? current.dbPath : '',
       // 切换到 SAP HANA 时初始化扩展配置；切换到其他类型时清空
-      extraConfig: value === 'saphana'
-        ? ({ ...defaultSapHanaExtraConfig(), ...(current.extraConfig as SapHanaExtraConfig | undefined) } as unknown as Record<string, unknown>)
-        : undefined,
+      extraConfig:
+        value === 'saphana'
+          ? ({
+              ...defaultSapHanaExtraConfig(),
+              ...(current.extraConfig as SapHanaExtraConfig | undefined),
+            } as unknown as Record<string, unknown>)
+          : undefined,
     }))
     if (value !== 'file') {
       setExcludePatternsText('')
@@ -238,7 +280,10 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
       if (validPaths.length === 0 && !value.sourcePath.trim()) {
         return '请输入至少一个源路径'
       }
-      if (value.backupMode === 'repository' && (((value.nodeId ?? 0) > 0 && value.nodeId !== localNodeId) || value.nodePoolTag?.trim())) {
+      if (
+        value.backupMode === 'repository' &&
+        (((value.nodeId ?? 0) > 0 && value.nodeId !== localNodeId) || value.nodePoolTag?.trim())
+      ) {
         return 'CDC 仓库模式当前仅支持 Master 本机执行'
       }
       if (value.backupMode === 'repository' && value.replicationTargetIds.length > 0) {
@@ -293,11 +338,19 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <div>
           <Typography.Text>任务名称</Typography.Text>
-          <Input value={draft.name} placeholder="例如：生产站点每日备份" onChange={(value) => updateDraft({ name: value })} />
+          <Input
+            value={draft.name}
+            placeholder="例如：生产站点每日备份"
+            onChange={(value) => updateDraft({ name: value })}
+          />
         </div>
         <div>
           <Typography.Text>备份类型</Typography.Text>
-          <Select value={draft.type} options={backupTaskTypeOptions as unknown as { label: string; value: string }[]} onChange={(value) => updateTaskType(value as BackupTaskType)} />
+          <Select
+            value={draft.type}
+            options={backupTaskTypeOptions as unknown as { label: string; value: string }[]}
+            onChange={(value) => updateTaskType(value as BackupTaskType)}
+          />
         </div>
         <SourceServerSelector
           nodeId={draft.nodeId ?? 0}
@@ -306,29 +359,43 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
           nodes={nodes}
           onNodeChange={(nodeId) => {
             // 固定源服务器与服务器池互斥；CDC 仓库仍固定在 Master 单写者。
-            updateDraft(nodeId > 0
-              ? {
-                nodeId,
-                nodePoolTag: '',
-                backupMode: nodeId !== localNodeId && draft.backupMode === 'repository' ? 'full' : draft.backupMode,
-              }
-              : { nodeId })
+            updateDraft(
+              nodeId > 0
+                ? {
+                    nodeId,
+                    nodePoolTag: '',
+                    backupMode:
+                      nodeId !== localNodeId && draft.backupMode === 'repository'
+                        ? 'full'
+                        : draft.backupMode,
+                  }
+                : { nodeId },
+            )
           }}
-          onNodePoolTagChange={(value) => updateDraft({
-            nodePoolTag: value,
-            backupMode: value.trim() && draft.backupMode === 'repository' ? 'full' : draft.backupMode,
-          })}
+          onNodePoolTagChange={(value) =>
+            updateDraft({
+              nodePoolTag: value,
+              backupMode:
+                value.trim() && draft.backupMode === 'repository' ? 'full' : draft.backupMode,
+            })
+          }
         />
         <div>
           <Typography.Text>Cron 表达式</Typography.Text>
-          <CronInput value={draft.cronExpr} onChange={(value) => updateDraft({ cronExpr: value })} />
+          <CronInput
+            value={draft.cronExpr}
+            onChange={(value) => updateDraft({ cronExpr: value })}
+          />
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
             留空表示仅手动执行；已填写时由服务端调度器自动触发。
           </Typography.Paragraph>
         </div>
         <Space align="center" size="medium">
           <Typography.Text>启用任务</Typography.Text>
-          <Switch checked={draft.enabled} onChange={(checked) => updateDraft({ enabled: checked })} />
+          <Switch
+            checked={draft.enabled}
+            onChange={(checked) => updateDraft({ enabled: checked })}
+          />
         </Space>
       </Space>
     )
@@ -423,23 +490,44 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
           <>
             <div>
               <Typography.Text>数据库主机</Typography.Text>
-              <Input value={draft.dbHost} placeholder="例如：127.0.0.1" onChange={(value) => updateDraft({ dbHost: value })} />
+              <Input
+                value={draft.dbHost}
+                placeholder="例如：127.0.0.1"
+                onChange={(value) => updateDraft({ dbHost: value })}
+              />
             </div>
             <div>
               <Typography.Text>数据库端口</Typography.Text>
-              <InputNumber style={{ width: '100%' }} value={draft.dbPort} min={1} onChange={(value) => updateDraft({ dbPort: Number(value ?? 0) })} />
+              <InputNumber
+                style={{ width: '100%' }}
+                value={draft.dbPort}
+                min={1}
+                onChange={(value) => updateDraft({ dbPort: Number(value ?? 0) })}
+              />
             </div>
             <div>
               <Typography.Text>数据库用户名</Typography.Text>
-              <Input value={draft.dbUser} placeholder="例如：backup" onChange={(value) => updateDraft({ dbUser: value })} />
+              <Input
+                value={draft.dbUser}
+                placeholder="例如：backup"
+                onChange={(value) => updateDraft({ dbUser: value })}
+              />
             </div>
             <div>
               <Typography.Text>数据库密码</Typography.Text>
-              <Input.Password value={draft.dbPassword} placeholder={initialValue?.maskedFields?.includes('dbPassword') ? '留空表示保持原密码' : '请输入数据库密码'} onChange={(value) => updateDraft({ dbPassword: value })} />
+              <Input.Password
+                value={draft.dbPassword}
+                placeholder={
+                  initialValue?.maskedFields?.includes('dbPassword')
+                    ? '留空表示保持原密码'
+                    : '请输入数据库密码'
+                }
+                onChange={(value) => updateDraft({ dbPassword: value })}
+              />
             </div>
             <div>
               <Typography.Text>数据库名称</Typography.Text>
-              {(draft.type === 'mysql' || draft.type === 'postgresql') ? (
+              {draft.type === 'mysql' || draft.type === 'postgresql' ? (
                 <DatabasePicker
                   dbType={draft.type}
                   dbHost={draft.dbHost}
@@ -451,7 +539,11 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
                   onChange={(value) => updateDraft({ dbName: value })}
                 />
               ) : (
-                <Input value={draft.dbName} placeholder="例如：app_prod" onChange={(value) => updateDraft({ dbName: value })} />
+                <Input
+                  value={draft.dbName}
+                  placeholder="例如：app_prod"
+                  onChange={(value) => updateDraft({ dbName: value })}
+                />
               )}
             </div>
             {isSapHanaBackupTask(draft.type) ? renderSapHanaExtraFields() : null}
@@ -477,7 +569,9 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
             style={{ width: '100%' }}
             value={hana.backupType}
             options={[...sapHanaBackupTypeOptions]}
-            onChange={(value) => updateHanaExtraConfig({ backupType: value as SapHanaExtraConfig['backupType'] })}
+            onChange={(value) =>
+              updateHanaExtraConfig({ backupType: value as SapHanaExtraConfig['backupType'] })
+            }
           />
         </div>
         <div>
@@ -487,10 +581,14 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
             value={hana.backupLevel}
             options={[...sapHanaBackupLevelOptions]}
             disabled={hana.backupType === 'log'}
-            onChange={(value) => updateHanaExtraConfig({ backupLevel: value as SapHanaExtraConfig['backupLevel'] })}
+            onChange={(value) =>
+              updateHanaExtraConfig({ backupLevel: value as SapHanaExtraConfig['backupLevel'] })
+            }
           />
           {hana.backupType === 'log' ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>日志备份不支持级别配置</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              日志备份不支持级别配置
+            </Typography.Text>
           ) : null}
         </div>
         <div>
@@ -502,7 +600,9 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
             max={32}
             onChange={(value) => updateHanaExtraConfig({ backupChannels: Number(value ?? 1) })}
           />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{'>'} 1 时启用 HANA 多路径并行备份</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {'>'} 1 时启用 HANA 多路径并行备份
+          </Typography.Text>
         </div>
         <div>
           <Typography.Text>失败重试次数</Typography.Text>
@@ -543,7 +643,10 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
     }
   }
 
-  async function handleQuickCreateTest(value: StorageTargetPayload, targetId?: number): Promise<StorageConnectionTestResult> {
+  async function handleQuickCreateTest(
+    value: StorageTargetPayload,
+    targetId?: number,
+  ): Promise<StorageConnectionTestResult> {
     if (!onTestStorageTarget) return { success: false, message: '测试不可用' }
     setQuickCreateTesting(true)
     try {
@@ -565,7 +668,9 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
               value={draft.storageTargetIds?.length > 0 ? draft.storageTargetIds : undefined}
               placeholder="请选择存储目标（可多选）"
               options={storageTargetOptions}
-              onChange={(values: number[]) => updateDraft({ storageTargetIds: values, storageTargetId: values[0] ?? 0 })}
+              onChange={(values: number[]) =>
+                updateDraft({ storageTargetIds: values, storageTargetId: values[0] ?? 0 })
+              }
             />
             {onCreateStorageTarget && (
               <Button type="outline" size="small" onClick={() => setQuickCreateVisible(true)}>
@@ -573,15 +678,23 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
               </Button>
             )}
           </Space>
-          {((draft.nodeId ?? 0) > 0 && draft.nodeId !== localNodeId) || draft.nodePoolTag?.trim() ? (
+          {((draft.nodeId ?? 0) > 0 && draft.nodeId !== localNodeId) ||
+          draft.nodePoolTag?.trim() ? (
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
-              远程源服务器会直传 S3、WebDAV 等网络存储；本地磁盘目标启用 Master 中转后，文件经 Agent 认证 API 流式写入中央目录。跨公网部署请为 Master 配置 HTTPS。
+              远程源服务器会直传 S3、WebDAV 等网络存储；本地磁盘目标启用 Master 中转后，文件经 Agent
+              认证 API 流式写入中央目录。跨公网部署请为 Master 配置 HTTPS。
             </Typography.Paragraph>
           ) : null}
         </div>
         <div>
           <Typography.Text>压缩策略</Typography.Text>
-          <Select value={draft.compression} options={backupCompressionOptions as unknown as { label: string; value: string }[]} onChange={(value) => updateDraft({ compression: value as BackupTaskPayload['compression'] })} />
+          <Select
+            value={draft.compression}
+            options={backupCompressionOptions as unknown as { label: string; value: string }[]}
+            onChange={(value) =>
+              updateDraft({ compression: value as BackupTaskPayload['compression'] })
+            }
+          />
         </div>
         {isFileBackupTask(draft.type) && (
           <div>
@@ -593,14 +706,24 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
                 { label: '差异备份（仅文件、本机）', value: 'differential' },
                 { label: 'CDC 去重仓库（仅文件、本机）', value: 'repository' },
               ]}
-              onChange={(value) => updateDraft(value === 'repository'
-                ? { backupMode: value as BackupMode, nodeId: 0, nodePoolTag: '', replicationTargetIds: [] }
-                : { backupMode: value as BackupMode })}
+              onChange={(value) =>
+                updateDraft(
+                  value === 'repository'
+                    ? {
+                        backupMode: value as BackupMode,
+                        nodeId: 0,
+                        nodePoolTag: '',
+                        replicationTargetIds: [],
+                      }
+                    : { backupMode: value as BackupMode },
+                )
+              }
             />
             {draft.backupMode === 'differential' && (
               <div style={{ marginTop: 8 }}>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  差异备份仅打包自上次全量以来的变更，显著减小体积；超过下列天数将自动重做一次全量以控制差异链长度。恢复时自动按「全量 + 差异」链还原。
+                  差异备份仅打包自上次全量以来的变更，显著减小体积；超过下列天数将自动重做一次全量以控制差异链长度。恢复时自动按「全量
+                  + 差异」链还原。
                 </Typography.Text>
                 <InputNumber
                   style={{ width: '100%', marginTop: 4 }}
@@ -614,18 +737,30 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
             )}
             {draft.backupMode === 'repository' && (
               <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
-                文件按内容边界切块并写入全局分块池；相同数据跨文件、跨快照只上传一次。新块会合并为 pack，恢复时通过索引按需读取。当前版本采用单写者索引，因此固定在 Master 本机执行；需要多副本时请直接多选上方存储目标。
+                文件按内容边界切块并写入全局分块池；相同数据跨文件、跨快照只上传一次。新块会合并为
+                pack，恢复时通过索引按需读取。当前版本采用单写者索引，因此固定在 Master
+                本机执行；需要多副本时请直接多选上方存储目标。
               </Typography.Paragraph>
             )}
           </div>
         )}
         <div>
           <Typography.Text>保留天数</Typography.Text>
-          <InputNumber style={{ width: '100%' }} value={draft.retentionDays} min={0} onChange={(value) => updateDraft({ retentionDays: Number(value ?? 0) })} />
+          <InputNumber
+            style={{ width: '100%' }}
+            value={draft.retentionDays}
+            min={0}
+            onChange={(value) => updateDraft({ retentionDays: Number(value ?? 0) })}
+          />
         </div>
         <div>
           <Typography.Text>最大保留份数</Typography.Text>
-          <InputNumber style={{ width: '100%' }} value={draft.maxBackups} min={0} onChange={(value) => updateDraft({ maxBackups: Number(value ?? 0) })} />
+          <InputNumber
+            style={{ width: '100%' }}
+            value={draft.maxBackups}
+            min={0}
+            onChange={(value) => updateDraft({ maxBackups: Number(value ?? 0) })}
+          />
         </div>
         <div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -633,16 +768,44 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
           </Typography.Text>
           <Grid.Row gutter={8} style={{ marginTop: 4 }}>
             <Grid.Col span={6}>
-              <InputNumber style={{ width: '100%' }} placeholder="日" prefix="日" min={0} value={draft.keepDaily} onChange={(value) => updateDraft({ keepDaily: Number(value ?? 0) })} />
+              <InputNumber
+                style={{ width: '100%' }}
+                placeholder="日"
+                prefix="日"
+                min={0}
+                value={draft.keepDaily}
+                onChange={(value) => updateDraft({ keepDaily: Number(value ?? 0) })}
+              />
             </Grid.Col>
             <Grid.Col span={6}>
-              <InputNumber style={{ width: '100%' }} placeholder="周" prefix="周" min={0} value={draft.keepWeekly} onChange={(value) => updateDraft({ keepWeekly: Number(value ?? 0) })} />
+              <InputNumber
+                style={{ width: '100%' }}
+                placeholder="周"
+                prefix="周"
+                min={0}
+                value={draft.keepWeekly}
+                onChange={(value) => updateDraft({ keepWeekly: Number(value ?? 0) })}
+              />
             </Grid.Col>
             <Grid.Col span={6}>
-              <InputNumber style={{ width: '100%' }} placeholder="月" prefix="月" min={0} value={draft.keepMonthly} onChange={(value) => updateDraft({ keepMonthly: Number(value ?? 0) })} />
+              <InputNumber
+                style={{ width: '100%' }}
+                placeholder="月"
+                prefix="月"
+                min={0}
+                value={draft.keepMonthly}
+                onChange={(value) => updateDraft({ keepMonthly: Number(value ?? 0) })}
+              />
             </Grid.Col>
             <Grid.Col span={6}>
-              <InputNumber style={{ width: '100%' }} placeholder="年" prefix="年" min={0} value={draft.keepYearly} onChange={(value) => updateDraft({ keepYearly: Number(value ?? 0) })} />
+              <InputNumber
+                style={{ width: '100%' }}
+                placeholder="年"
+                prefix="年"
+                min={0}
+                value={draft.keepYearly}
+                onChange={(value) => updateDraft({ keepYearly: Number(value ?? 0) })}
+              />
             </Grid.Col>
           </Grid.Row>
         </div>
@@ -656,7 +819,10 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
         </div>
         <Space align="center" size="medium">
           <Typography.Text>备份后加密</Typography.Text>
-          <Switch checked={draft.encrypt} onChange={(checked) => updateDraft({ encrypt: checked })} />
+          <Switch
+            checked={draft.encrypt}
+            onChange={(checked) => updateDraft({ encrypt: checked })}
+          />
         </Space>
 
         <Divider style={{ margin: '8px 0' }} orientation="left">
@@ -699,7 +865,8 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
             onChange={(v) => updateDraft({ maintenanceWindows: v })}
           />
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
-            留空 = 无限制。非窗口时间调度会自动跳过，手动执行会被拒绝。多段用 <Typography.Text code>;</Typography.Text> 分隔。
+            留空 = 无限制。非窗口时间调度会自动跳过，手动执行会被拒绝。多段用{' '}
+            <Typography.Text code>;</Typography.Text> 分隔。
           </Typography.Paragraph>
         </div>
 
@@ -734,7 +901,9 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
             style={{ width: '100%' }}
             value={draft.replicationTargetIds}
             placeholder="选择副本目标（不选 = 不启用复制）"
-            options={storageTargetOptions.filter((opt) => !(draft.storageTargetIds ?? []).includes(opt.value as number))}
+            options={storageTargetOptions.filter(
+              (opt) => !(draft.storageTargetIds ?? []).includes(opt.value as number),
+            )}
             disabled={draft.backupMode === 'repository'}
             onChange={(values: number[]) => updateDraft({ replicationTargetIds: values })}
           />
@@ -750,13 +919,19 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
         </Divider>
         <Space align="center" size="medium">
           <Typography.Text>启用定时验证</Typography.Text>
-          <Switch checked={draft.verifyEnabled} onChange={(checked) => updateDraft({ verifyEnabled: checked })} />
+          <Switch
+            checked={draft.verifyEnabled}
+            onChange={(checked) => updateDraft({ verifyEnabled: checked })}
+          />
         </Space>
         {draft.verifyEnabled && (
           <>
             <div>
               <Typography.Text>验证 Cron 表达式</Typography.Text>
-              <CronInput value={draft.verifyCronExpr} onChange={(value) => updateDraft({ verifyCronExpr: value })} />
+              <CronInput
+                value={draft.verifyCronExpr}
+                onChange={(value) => updateDraft({ verifyCronExpr: value })}
+              />
               <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
                 定期从最新成功备份自动校验可恢复性，满足企业合规（SOC2/ISO27001）。
               </Typography.Paragraph>
@@ -765,9 +940,7 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
               <Typography.Text>验证模式</Typography.Text>
               <Select
                 value={draft.verifyMode}
-                options={[
-                  { label: 'Quick（快速格式与完整性校验）', value: 'quick' },
-                ]}
+                options={[{ label: 'Quick（快速格式与完整性校验）', value: 'quick' }]}
                 onChange={(value) => updateDraft({ verifyMode: value as 'quick' | 'deep' })}
               />
             </div>
@@ -786,7 +959,14 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
       unmountOnExit={false}
     >
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {error ? <Alert type="error" content={error} /> : <Alert type="info" content="配置数据库或文件的自动备份任务，系统将按策略执行并自动清理过期份数。" />}
+        {error ? (
+          <Alert type="error" content={error} />
+        ) : (
+          <Alert
+            type="info"
+            content="配置数据库或文件的自动备份任务，系统将按策略执行并自动清理过期份数。"
+          />
+        )}
         <Steps current={currentStep} size="small">
           <Steps.Step title="基础信息" />
           <Steps.Step title="源配置" />
@@ -797,11 +977,17 @@ export function BackupTaskFormDrawer({ visible, loading, initialValue, storageTa
         {currentStep === 1 ? renderSourceStep() : null}
         {currentStep === 2 ? renderPolicyStep() : null}
         <Space>
-          <Button disabled={currentStep === 0} onClick={() => setCurrentStep((value) => Math.max(0, value - 1))}>
+          <Button
+            disabled={currentStep === 0}
+            onClick={() => setCurrentStep((value) => Math.max(0, value - 1))}
+          >
             上一步
           </Button>
           {currentStep < 2 ? (
-            <Button type="outline" onClick={() => setCurrentStep((value) => Math.min(2, value + 1))}>
+            <Button
+              type="outline"
+              onClick={() => setCurrentStep((value) => Math.min(2, value + 1))}
+            >
               下一步
             </Button>
           ) : (

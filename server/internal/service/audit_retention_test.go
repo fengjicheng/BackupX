@@ -23,6 +23,11 @@ func TestAuditRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	auditRepo := repository.NewAuditLogRepository(db)
 	configRepo := repository.NewSystemConfigRepository(db)
 	svc := NewAuditService(auditRepo)

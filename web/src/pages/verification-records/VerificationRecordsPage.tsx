@@ -3,7 +3,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { VerificationRecordLogDrawer } from '../../components/verification-records/VerificationRecordLogDrawer'
 import { listVerificationRecords } from '../../services/verification-records'
-import type { VerificationRecordStatus, VerificationRecordSummary } from '../../types/verification-records'
+import type {
+  VerificationRecordStatus,
+  VerificationRecordSummary,
+} from '../../types/verification-records'
 import { resolveErrorMessage } from '../../utils/error'
 import { formatDateTime, formatDuration } from '../../utils/format'
 
@@ -78,7 +81,9 @@ export function VerificationRecordsPage() {
         <Space direction="vertical" size={2}>
           <Typography.Text bold>{record.taskName}</Typography.Text>
           <Space>
-            <Tag color={statusColor(record.status)} bordered>{statusLabel(record.status)}</Tag>
+            <Tag color={statusColor(record.status)} bordered>
+              {statusLabel(record.status)}
+            </Tag>
             <Tag bordered>{record.mode === 'deep' ? '深度' : '快速'}</Tag>
           </Space>
         </Space>
@@ -90,7 +95,8 @@ export function VerificationRecordsPage() {
         <Space direction="vertical" size={2}>
           <Typography.Text>{record.summary || '-'}</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            源备份 #{record.backupRecordId}{record.backupFileName ? ` (${record.backupFileName})` : ''}
+            源备份 #{record.backupRecordId}
+            {record.backupFileName ? ` (${record.backupFileName})` : ''}
           </Typography.Text>
         </Space>
       ),
@@ -124,7 +130,11 @@ export function VerificationRecordsPage() {
       dataIndex: 'actions',
       width: 120,
       render: (_: unknown, record: VerificationRecordSummary) => (
-        <Button size="small" type="text" onClick={() => updateSearchParam('verifyId', String(record.id))}>
+        <Button
+          size="small"
+          type="text"
+          onClick={() => updateSearchParam('verifyId', String(record.id))}
+        >
           查看日志
         </Button>
       ),
@@ -144,25 +154,45 @@ export function VerificationRecordsPage() {
         <Space wrap>
           <div>
             <Typography.Text>状态筛选</Typography.Text>
-            <Select style={{ width: 180 }} value={selectedStatus} options={statusOptions} onChange={(value) => updateSearchParam('status', value ? String(value) : undefined)} />
+            <Select
+              style={{ width: 180 }}
+              value={selectedStatus}
+              options={statusOptions}
+              onChange={(value) => updateSearchParam('status', value ? String(value) : undefined)}
+            />
           </div>
-          <Button type="outline" onClick={() => {
-            const next = new URLSearchParams(searchParams)
-            next.delete('status')
-            setSearchParams(next, { replace: true })
-          }}>
+          <Button
+            type="outline"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('status')
+              setSearchParams(next, { replace: true })
+            }}
+          >
             重置筛选
           </Button>
         </Space>
       </Card>
 
-      {error ? <Card><Typography.Text type="error">{error}</Typography.Text></Card> : null}
+      {error ? (
+        <Card>
+          <Typography.Text type="error">{error}</Typography.Text>
+        </Card>
+      ) : null}
 
       <Card>
         {records.length === 0 && !loading ? (
           <Empty description="暂无验证记录" />
         ) : (
-          <Table rowKey="id" loading={loading} columns={columns} data={records} pagination={{ pageSize: 10 }} stripe noDataElement={<Empty description="暂无验证记录" />} />
+          <Table
+            rowKey="id"
+            loading={loading}
+            columns={columns}
+            data={records}
+            pagination={{ pageSize: 10 }}
+            stripe
+            noDataElement={<Empty description="暂无验证记录" />}
+          />
         )}
       </Card>
 

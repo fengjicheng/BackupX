@@ -67,11 +67,12 @@ type NodeUpdateInput struct {
 
 // NodeService manages the cluster nodes.
 type NodeService struct {
-	repo     repository.NodeRepository
-	taskRepo repository.BackupTaskRepository
-	agentRPC NodeAgentRPC
-	cmdRepo  repository.AgentCommandRepository
-	version  string
+	repo       repository.NodeRepository
+	taskRepo   repository.BackupTaskRepository
+	agentRPC   NodeAgentRPC
+	cmdRepo    repository.AgentCommandRepository
+	version    string
+	background BackgroundRunner
 }
 
 // NodeAgentRPC 抽象 Agent 远程调用能力（避免 service 内循环依赖）。
@@ -83,6 +84,10 @@ type NodeAgentRPC interface {
 
 func NewNodeService(repo repository.NodeRepository, version string) *NodeService {
 	return &NodeService{repo: repo, version: version}
+}
+
+func (s *NodeService) SetBackgroundRunner(runner BackgroundRunner) {
+	s.background = runner
 }
 
 // SetTaskRepository 注入任务仓储以支持删除前引用检查。可选注入，便于测试。
@@ -315,19 +320,19 @@ func (s *NodeService) StartOfflineMonitor(ctx context.Context, interval time.Dur
 	if interval <= 0 {
 		interval = 15 * time.Second
 	}
-	ticker := time.NewTicker(interval)
-	go func() {
+	startBackgroundMonitor(s.background, ctx, func(runCtx context.Context) {
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
 				threshold := time.Now().UTC().Add(-OfflineThreshold)
-				_, _ = s.repo.MarkStaleOffline(ctx, threshold)
+				_, _ = s.repo.MarkStaleOffline(runCtx, threshold)
 			}
 		}
-	}()
+	})
 }
 
 // Heartbeat updates the node status when an agent reports in.

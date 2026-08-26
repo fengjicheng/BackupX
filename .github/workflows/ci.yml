@@ -26,7 +26,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: "1.25"
           cache-dependency-path: server/go.sum
 
       - name: Verify modules
@@ -54,6 +54,31 @@ jobs:
         working-directory: server
         run: go test ./... -v
 
+  backend-windows:
+    name: Go Test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      - name: Verify modules
+        working-directory: server
+        run: go mod verify
+
+      - name: Build
+        working-directory: server
+        run: go build ./...
+
+      - name: Test
+        working-directory: server
+        run: go test ./...
+
   frontend:
     name: React Build & Test
     runs-on: ubuntu-latest
@@ -64,13 +89,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
           cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
         working-directory: web
         run: npm ci
+
+      - name: Audit production dependencies
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Lint and formatting
+        working-directory: web
+        run: npm run lint && npm run format:check
 
       - name: Test
         working-directory: web
@@ -79,3 +112,48 @@ jobs:
       - name: Type Check & Build
         working-directory: web
         run: npm run build
+
+  docs:
+    name: Documentation Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: docs-site
+        run: npm ci
+
+      - name: Type Check & Build
+        working-directory: docs-site
+        run: npm run typecheck && npm run build
+
+  container:
+    name: Container Build
+    needs: [backend, backend-windows, frontend, docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: backupx:ci
+          cache-from: type=gha,scope=backupx-ci
+          cache-to: type=gha,mode=max,scope=backupx-ci

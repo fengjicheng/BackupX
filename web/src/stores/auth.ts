@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { fetchProfile, login, setup, type LoginPayload, type SetupPayload, type UserInfo } from '../services/auth'
+import {
+  fetchProfile,
+  login,
+  setup,
+  type LoginPayload,
+  type SetupPayload,
+  type UserInfo,
+} from '../services/auth'
 import { setAccessToken, setUnauthorizedHandler } from '../services/http'
 
 type AuthStatus = 'unknown' | 'loading' | 'anonymous' | 'authenticated'

@@ -2,7 +2,9 @@ import { http, type ApiEnvelope, unwrapApiEnvelope } from './http'
 import type { ComplianceReport } from '../types/reports'
 
 export async function fetchComplianceReport(days = 30) {
-  const response = await http.get<ApiEnvelope<ComplianceReport>>('/reports/compliance', { params: { days } })
+  const response = await http.get<ApiEnvelope<ComplianceReport>>('/reports/compliance', {
+    params: { days },
+  })
   return unwrapApiEnvelope(response.data)
 }
 

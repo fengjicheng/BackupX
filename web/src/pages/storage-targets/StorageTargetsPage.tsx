@@ -1,4 +1,17 @@
-import { Alert, Button, Card, Empty, Grid, Message, PageHeader, Progress, Space, Spin, Tag, Typography } from '@arco-design/web-react'
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  Grid,
+  Message,
+  PageHeader,
+  Progress,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from '@arco-design/web-react'
 import axios from 'axios'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -15,7 +28,12 @@ import {
   updateStorageTarget,
 } from '../../services/storage-targets'
 import { formatBytes } from '../../utils/format'
-import type { StorageConnectionTestResult, StorageTargetDetail, StorageTargetPayload, StorageTargetSummary } from '../../types/storage-targets'
+import type {
+  StorageConnectionTestResult,
+  StorageTargetDetail,
+  StorageTargetPayload,
+  StorageTargetSummary,
+} from '../../types/storage-targets'
 import { getStorageTargetTypeLabel } from '../../components/storage-targets/field-config'
 import { StorageTargetFormDrawer } from '../../components/storage-targets/StorageTargetFormDrawer'
 import { StorageTargetName } from '../../components/storage-targets/StorageTargetName'
@@ -30,11 +48,23 @@ function resolveErrorMessage(error: unknown) {
 function renderTestStatus(target: StorageTargetSummary) {
   switch (target.lastTestStatus) {
     case 'success':
-      return <Tag color="green" bordered>连接正常</Tag>
+      return (
+        <Tag color="green" bordered>
+          连接正常
+        </Tag>
+      )
     case 'failed':
-      return <Tag color="red" bordered>最近测试失败</Tag>
+      return (
+        <Tag color="red" bordered>
+          最近测试失败
+        </Tag>
+      )
     default:
-      return <Tag color="arcoblue" bordered>未测试</Tag>
+      return (
+        <Tag color="arcoblue" bordered>
+          未测试
+        </Tag>
+      )
   }
 }
 
@@ -56,14 +86,16 @@ export function StorageTargetsPage() {
       setError('')
       // 异步加载每个启用目标的使用量（容量 About）。失败不阻塞列表展示。
       const usageEntries = await Promise.all(
-        result.filter((t) => t.enabled).map(async (t) => {
-          try {
-            const u = await getStorageTargetUsage(t.id)
-            return [t.id, u] as const
-          } catch {
-            return null
-          }
-        }),
+        result
+          .filter((t) => t.enabled)
+          .map(async (t) => {
+            try {
+              const u = await getStorageTargetUsage(t.id)
+              return [t.id, u] as const
+            } catch {
+              return null
+            }
+          }),
       )
       const next: Record<number, StorageTargetUsage> = {}
       for (const entry of usageEntries) {
@@ -139,7 +171,10 @@ export function StorageTargetsPage() {
     }
   }
 
-  async function handleDraftTest(value: StorageTargetPayload, targetId?: number): Promise<StorageConnectionTestResult> {
+  async function handleDraftTest(
+    value: StorageTargetPayload,
+    targetId?: number,
+  ): Promise<StorageConnectionTestResult> {
     setTesting(true)
     try {
       // When editing an existing target, use saved config test to avoid sending masked values
@@ -222,22 +257,42 @@ export function StorageTargetsPage() {
             <Grid.Col span={8} key={target.id}>
               <Card style={{ height: '100%' }}>
                 <Space direction="vertical" size="medium" style={{ width: '100%' }}>
-                  <Space size="large" align="start" style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}>
+                  <Space
+                    size="large"
+                    align="start"
+                    style={{ marginBottom: 16, width: '100%', justifyContent: 'space-between' }}
+                  >
                     <div>
                       <Typography.Title heading={6} style={{ marginBottom: 4 }}>
                         <StorageTargetName name={target.name} starred={target.starred} />
                       </Typography.Title>
                       <Space>
-                        {getStorageTargetTypeLabel(target.type) && <Tag color="arcoblue" bordered>{getStorageTargetTypeLabel(target.type)}</Tag>}
-                        {target.enabled ? <Tag color="green" bordered>已启用</Tag> : <Tag color="gray" bordered>已停用</Tag>}
+                        {getStorageTargetTypeLabel(target.type) && (
+                          <Tag color="arcoblue" bordered>
+                            {getStorageTargetTypeLabel(target.type)}
+                          </Tag>
+                        )}
+                        {target.enabled ? (
+                          <Tag color="green" bordered>
+                            已启用
+                          </Tag>
+                        ) : (
+                          <Tag color="gray" bordered>
+                            已停用
+                          </Tag>
+                        )}
                         {renderTestStatus(target)}
                       </Space>
                     </div>
                   </Space>
 
-                  {target.description ? <Typography.Paragraph>{target.description}</Typography.Paragraph> : null}
+                  {target.description ? (
+                    <Typography.Paragraph>{target.description}</Typography.Paragraph>
+                  ) : null}
                   {target.lastTestMessage ? (
-                    <Typography.Paragraph type="secondary">最近测试：{target.lastTestMessage}</Typography.Paragraph>
+                    <Typography.Paragraph type="secondary">
+                      最近测试：{target.lastTestMessage}
+                    </Typography.Paragraph>
                   ) : null}
                   {(() => {
                     const usage = usageMap[target.id]
@@ -251,11 +306,17 @@ export function StorageTargetsPage() {
                       return (
                         <div>
                           <Space size="mini" style={{ marginBottom: 4 }}>
-                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>使用率 {percent}%</Typography.Text>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                              使用率 {percent}%
+                            </Typography.Text>
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                               {formatBytes(disk.used)} / {formatBytes(disk.total)}
                             </Typography.Text>
-                            {rate >= 0.85 && <Tag color="red" bordered size="small">容量预警</Tag>}
+                            {rate >= 0.85 && (
+                              <Tag color="red" bordered size="small">
+                                容量预警
+                              </Tag>
+                            )}
                           </Space>
                           <Progress percent={percent} color={color} size="small" showText={false} />
                         </div>
@@ -273,16 +334,34 @@ export function StorageTargetsPage() {
                   <Typography.Text type="secondary">更新时间：{target.updatedAt}</Typography.Text>
 
                   <Space wrap size="mini">
-                    <Button size="small" type="text" onClick={() => void handleToggleStar(target.id)}>
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={() => void handleToggleStar(target.id)}
+                    >
                       {target.starred ? '取消收藏' : '收藏'}
                     </Button>
-                    <Button size="small" type="text" onClick={() => void openEdit(target.id)} loading={submitting && editingTarget?.id === target.id}>
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={() => void openEdit(target.id)}
+                      loading={submitting && editingTarget?.id === target.id}
+                    >
                       编辑
                     </Button>
-                    <Button size="small" type="text" onClick={() => void handleSavedTest(target.id)}>
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={() => void handleSavedTest(target.id)}
+                    >
                       测试连接
                     </Button>
-                    <Button size="small" type="text" status="danger" onClick={() => void handleDelete(target.id)}>
+                    <Button
+                      size="small"
+                      type="text"
+                      status="danger"
+                      onClick={() => void handleDelete(target.id)}
+                    >
                       删除
                     </Button>
                   </Space>

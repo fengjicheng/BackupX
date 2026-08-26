@@ -1,4 +1,4 @@
-import { Button, Divider, Input, Select, Space, Switch, Typography } from '@arco-design/web-react'
+import { Button, Input, Select, Space, Switch, Typography } from '@arco-design/web-react'
 import { useEffect, useMemo, useState } from 'react'
 
 export interface CronInputProps {
@@ -72,8 +72,20 @@ function describeCron(expr: string): string {
 
   // 每周某天
   if (day === '*' && week !== '*') {
-    const weekNames: Record<string, string> = { '0': '日', '1': '一', '2': '二', '3': '三', '4': '四', '5': '五', '6': '六', '7': '日' }
-    const days = week.split(',').map((w) => `周${weekNames[w] || w}`).join('、')
+    const weekNames: Record<string, string> = {
+      '0': '日',
+      '1': '一',
+      '2': '二',
+      '3': '三',
+      '4': '四',
+      '5': '五',
+      '6': '六',
+      '7': '日',
+    }
+    const days = week
+      .split(',')
+      .map((w) => `周${weekNames[w] || w}`)
+      .join('、')
     return `每${days} ${time} 执行`
   }
   // 每月某日
@@ -103,7 +115,7 @@ export function CronInput({ value, onChange }: CronInputProps) {
 
   // 从 prop 同步
   useEffect(() => {
-    if (value !== undefined && value !== cronExpr) {
+    if (value !== undefined) {
       setCronExpr(value || DEFAULT_CRON)
     }
   }, [value])
@@ -205,12 +217,12 @@ export function CronInput({ value, onChange }: CronInputProps) {
             if (isAdvanced) emit(val)
           }}
         />
-        {description && (
-          <Typography.Text type="secondary">{description}</Typography.Text>
-        )}
+        {description && <Typography.Text type="secondary">{description}</Typography.Text>}
         <div style={{ marginLeft: 'auto' }}>
           <Space size="mini">
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>手动输入</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              手动输入
+            </Typography.Text>
             <Switch
               size="small"
               checked={isAdvanced}
@@ -230,16 +242,32 @@ export function CronInput({ value, onChange }: CronInputProps) {
       {showCustom && !isAdvanced && (
         <div style={{ padding: '12px 16px', background: 'var(--color-fill-1)', borderRadius: 6 }}>
           <Space size="large" style={{ marginBottom: 12 }}>
-            <Button size="small" type={mode === 'daily' ? 'primary' : 'text'} onClick={() => handleCustomChange({ mode: 'daily' })}>
+            <Button
+              size="small"
+              type={mode === 'daily' ? 'primary' : 'text'}
+              onClick={() => handleCustomChange({ mode: 'daily' })}
+            >
               每天
             </Button>
-            <Button size="small" type={mode === 'weekly' ? 'primary' : 'text'} onClick={() => handleCustomChange({ mode: 'weekly' })}>
+            <Button
+              size="small"
+              type={mode === 'weekly' ? 'primary' : 'text'}
+              onClick={() => handleCustomChange({ mode: 'weekly' })}
+            >
               每周
             </Button>
-            <Button size="small" type={mode === 'monthly' ? 'primary' : 'text'} onClick={() => handleCustomChange({ mode: 'monthly' })}>
+            <Button
+              size="small"
+              type={mode === 'monthly' ? 'primary' : 'text'}
+              onClick={() => handleCustomChange({ mode: 'monthly' })}
+            >
               每月
             </Button>
-            <Button size="small" type={mode === 'interval' ? 'primary' : 'text'} onClick={() => handleCustomChange({ mode: 'interval' })}>
+            <Button
+              size="small"
+              type={mode === 'interval' ? 'primary' : 'text'}
+              onClick={() => handleCustomChange({ mode: 'interval' })}
+            >
               间隔
             </Button>
           </Space>

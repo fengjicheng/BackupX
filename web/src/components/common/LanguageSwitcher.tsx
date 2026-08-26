@@ -1,6 +1,11 @@
 import { Select } from '@arco-design/web-react'
 import { useTranslation } from 'react-i18next'
-import { languageOptions, normalizeLanguage, setApplicationLanguage, type SupportedLanguage } from '../../i18n'
+import {
+  languageOptions,
+  normalizeLanguage,
+  setApplicationLanguage,
+  type SupportedLanguage,
+} from '../../i18n'
 
 export function LanguageSwitcher() {
   const { t, i18n } = useTranslation()

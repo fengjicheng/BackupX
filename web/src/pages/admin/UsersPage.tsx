@@ -19,8 +19,20 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AdminDataSection } from '../../components/admin/AdminDataSection'
-import { AdminRoleSelect, adminRoleDescriptions, adminRoleOptions } from '../../components/admin/AdminRoleSelect'
-import { IconDelete, IconEdit, IconList, IconPlus, IconRefresh, IconSafe, IconSearch } from '../../components/icons'
+import {
+  AdminRoleSelect,
+  adminRoleDescriptions,
+  adminRoleOptions,
+} from '../../components/admin/AdminRoleSelect'
+import {
+  IconDelete,
+  IconEdit,
+  IconList,
+  IconPlus,
+  IconRefresh,
+  IconSafe,
+  IconSearch,
+} from '../../components/icons'
 import { clearTrustedDeviceToken } from '../../services/auth'
 import {
   createUser,
@@ -40,7 +52,15 @@ import { roleLabel } from '../../utils/permissions'
 type UserStatusFilter = 'all' | 'enabled' | 'disabled'
 
 function createEmpty(): UserUpsertPayload {
-  return { username: '', password: '', displayName: '', email: '', phone: '', role: 'operator', disabled: false }
+  return {
+    username: '',
+    password: '',
+    displayName: '',
+    email: '',
+    phone: '',
+    role: 'operator',
+    disabled: false,
+  }
 }
 
 export function UsersPage() {
@@ -78,12 +98,16 @@ export function UsersPage() {
   const filteredItems = useMemo(() => {
     const keyword = query.trim().toLowerCase()
     return items.filter((item) => {
-      const matchesQuery = !keyword || [item.username, item.displayName, item.email, item.phone]
-        .some((value) => value?.toLowerCase().includes(keyword))
+      const matchesQuery =
+        !keyword ||
+        [item.username, item.displayName, item.email, item.phone].some((value) =>
+          value?.toLowerCase().includes(keyword),
+        )
       const matchesRole = roleFilter === 'all' || item.role === roleFilter
-      const matchesStatus = statusFilter === 'all'
-        || (statusFilter === 'enabled' && !item.disabled)
-        || (statusFilter === 'disabled' && item.disabled)
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'enabled' && !item.disabled) ||
+        (statusFilter === 'disabled' && item.disabled)
       return matchesQuery && matchesRole && matchesStatus
     })
   }, [items, query, roleFilter, statusFilter])
@@ -196,17 +220,29 @@ export function UsersPage() {
       description="维护登录账号、角色、联系方式和多因素认证状态。当前账号与最后一个管理员受到界面级保护。"
       metrics={[
         { label: '账号总数', value: items.length, detail: '系统中的全部登录账号' },
-        { label: '启用账号', value: enabledCount, detail: `${items.length - enabledCount} 个账号已停用` },
+        {
+          label: '启用账号',
+          value: enabledCount,
+          detail: `${items.length - enabledCount} 个账号已停用`,
+        },
         { label: '管理员', value: adminCount, detail: '拥有访问管理权限' },
-        { label: 'MFA 覆盖', value: `${mfaCount}/${enabledCount}`, detail: '已启用账号中的 MFA 使用情况' },
+        {
+          label: 'MFA 覆盖',
+          value: `${mfaCount}/${enabledCount}`,
+          detail: '已启用账号中的 MFA 使用情况',
+        },
       ]}
-      actions={(
+      actions={
         <Space>
-          <Button icon={<IconList />} onClick={() => navigate('/audit?category=user')}>用户审计</Button>
-          <Button type="primary" icon={<IconPlus />} onClick={openCreate}>新建用户</Button>
+          <Button icon={<IconList />} onClick={() => navigate('/audit?category=user')}>
+            用户审计
+          </Button>
+          <Button type="primary" icon={<IconPlus />} onClick={openCreate}>
+            新建用户
+          </Button>
         </Space>
-      )}
-      toolbar={(
+      }
+      toolbar={
         <div className="admin-toolbar">
           <div className="admin-toolbar__filters">
             <Input
@@ -237,17 +273,25 @@ export function UsersPage() {
             <Button
               type="text"
               disabled={!filtersActive}
-              onClick={() => { setQuery(''); setRoleFilter('all'); setStatusFilter('all') }}
+              onClick={() => {
+                setQuery('')
+                setRoleFilter('all')
+                setStatusFilter('all')
+              }}
             >
               清除筛选
             </Button>
           </div>
           <div className="admin-toolbar__status">
-            <Typography.Text type="secondary">显示 {filteredItems.length} / {items.length}</Typography.Text>
-            <Button icon={<IconRefresh />} loading={loading} onClick={() => void load()}>刷新</Button>
+            <Typography.Text type="secondary">
+              显示 {filteredItems.length} / {items.length}
+            </Typography.Text>
+            <Button icon={<IconRefresh />} loading={loading} onClick={() => void load()}>
+              刷新
+            </Button>
           </div>
         </div>
-      )}
+      }
     >
       {error ? (
         <div className="admin-data-panel__alert">
@@ -260,7 +304,9 @@ export function UsersPage() {
         data={filteredItems}
         stripe
         pagination={filteredItems.length > 10 ? { pageSize: 10 } : false}
-        noDataElement={<Empty description={filtersActive ? '没有符合筛选条件的用户' : '暂无用户'} />}
+        noDataElement={
+          <Empty description={filtersActive ? '没有符合筛选条件的用户' : '暂无用户'} />
+        }
         columns={[
           {
             title: '用户',
@@ -283,7 +329,11 @@ export function UsersPage() {
             title: '角色',
             dataIndex: 'role',
             width: 80,
-            render: (value: string) => <Tag color="arcoblue" bordered>{roleLabel(value)}</Tag>,
+            render: (value: string) => (
+              <Tag color="arcoblue" bordered>
+                {roleLabel(value)}
+              </Tag>
+            ),
           },
           {
             title: '联系方式',
@@ -300,34 +350,75 @@ export function UsersPage() {
             title: '状态',
             dataIndex: 'disabled',
             width: 80,
-            render: (disabled: boolean) => disabled
-              ? <Tag color="red" bordered>已停用</Tag>
-              : <Tag color="green" bordered>已启用</Tag>,
+            render: (disabled: boolean) =>
+              disabled ? (
+                <Tag color="red" bordered>
+                  已停用
+                </Tag>
+              ) : (
+                <Tag color="green" bordered>
+                  已启用
+                </Tag>
+              ),
           },
           {
             title: '多因素认证',
             dataIndex: 'mfaEnabled',
             width: 210,
-            render: (_: boolean, row: UserSummary) => row.mfaEnabled ? (
-              <Space wrap size={4}>
-                {row.twoFactorEnabled ? <Tag color="green" bordered>TOTP</Tag> : null}
-                {row.webAuthnEnabled ? <Tag color="arcoblue" bordered>Passkey {row.webAuthnCredentialCount}</Tag> : null}
-                {row.emailOtpEnabled ? <Tag color="purple" bordered>邮件</Tag> : null}
-                {row.smsOtpEnabled ? <Tag color="orange" bordered>短信</Tag> : null}
-                {row.trustedDeviceCount > 0 ? <Tag bordered>可信设备 {row.trustedDeviceCount}</Tag> : null}
-                {row.twoFactorEnabled ? <Typography.Text type="secondary">恢复码 {row.twoFactorRecoveryCodesRemaining}</Typography.Text> : null}
-              </Space>
-            ) : <Tag bordered>未启用</Tag>,
+            render: (_: boolean, row: UserSummary) =>
+              row.mfaEnabled ? (
+                <Space wrap size={4}>
+                  {row.twoFactorEnabled ? (
+                    <Tag color="green" bordered>
+                      TOTP
+                    </Tag>
+                  ) : null}
+                  {row.webAuthnEnabled ? (
+                    <Tag color="arcoblue" bordered>
+                      Passkey {row.webAuthnCredentialCount}
+                    </Tag>
+                  ) : null}
+                  {row.emailOtpEnabled ? (
+                    <Tag color="purple" bordered>
+                      邮件
+                    </Tag>
+                  ) : null}
+                  {row.smsOtpEnabled ? (
+                    <Tag color="orange" bordered>
+                      短信
+                    </Tag>
+                  ) : null}
+                  {row.trustedDeviceCount > 0 ? (
+                    <Tag bordered>可信设备 {row.trustedDeviceCount}</Tag>
+                  ) : null}
+                  {row.twoFactorEnabled ? (
+                    <Typography.Text type="secondary">
+                      恢复码 {row.twoFactorRecoveryCodesRemaining}
+                    </Typography.Text>
+                  ) : null}
+                </Space>
+              ) : (
+                <Tag bordered>未启用</Tag>
+              ),
           },
           {
             title: '操作',
             width: 270,
             render: (_: unknown, row: UserSummary) => {
-              const deleteDisabled = row.id === user?.id || (row.role === 'admin' && adminCount <= 1)
-              const deleteReason = row.id === user?.id ? '不能删除当前登录账号' : '不能删除系统最后一个管理员'
+              const deleteDisabled =
+                row.id === user?.id || (row.role === 'admin' && adminCount <= 1)
+              const deleteReason =
+                row.id === user?.id ? '不能删除当前登录账号' : '不能删除系统最后一个管理员'
               return (
                 <Space wrap>
-                  <Button size="small" type="text" icon={<IconEdit />} onClick={() => openEdit(row)}>编辑</Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<IconEdit />}
+                    onClick={() => openEdit(row)}
+                  >
+                    编辑
+                  </Button>
                   {row.mfaEnabled ? (
                     <Popconfirm
                       title={`确定重置用户「${row.username}」的全部 MFA 配置？`}
@@ -347,7 +438,15 @@ export function UsersPage() {
                   {deleteDisabled ? (
                     <Tooltip content={deleteReason}>
                       <span>
-                        <Button size="small" type="text" status="danger" icon={<IconDelete />} disabled>删除</Button>
+                        <Button
+                          size="small"
+                          type="text"
+                          status="danger"
+                          icon={<IconDelete />}
+                          disabled
+                        >
+                          删除
+                        </Button>
                       </span>
                     </Tooltip>
                   ) : (
@@ -397,19 +496,28 @@ export function UsersPage() {
             </Grid.Col>
             <Grid.Col span={12}>
               <Form.Item label="显示名称" required>
-                <Input value={draft.displayName} onChange={(value) => setDraft({ ...draft, displayName: value })} />
+                <Input
+                  value={draft.displayName}
+                  onChange={(value) => setDraft({ ...draft, displayName: value })}
+                />
               </Form.Item>
             </Grid.Col>
           </Grid.Row>
           <Grid.Row gutter={16}>
             <Grid.Col span={12}>
               <Form.Item label="邮箱">
-                <Input value={draft.email ?? ''} onChange={(value) => setDraft({ ...draft, email: value })} />
+                <Input
+                  value={draft.email ?? ''}
+                  onChange={(value) => setDraft({ ...draft, email: value })}
+                />
               </Form.Item>
             </Grid.Col>
             <Grid.Col span={12}>
               <Form.Item label="手机号">
-                <Input value={draft.phone ?? ''} onChange={(value) => setDraft({ ...draft, phone: value })} />
+                <Input
+                  value={draft.phone ?? ''}
+                  onChange={(value) => setDraft({ ...draft, phone: value })}
+                />
               </Form.Item>
             </Grid.Col>
           </Grid.Row>
@@ -429,7 +537,9 @@ export function UsersPage() {
                   onChange={(role) => setDraft({ ...draft, role })}
                 />
                 <span className="admin-form-note">
-                  {editingSelf ? '当前登录账号不能在此修改自身角色。' : adminRoleDescriptions[draft.role]}
+                  {editingSelf
+                    ? '当前登录账号不能在此修改自身角色。'
+                    : adminRoleDescriptions[draft.role]}
                 </span>
               </Form.Item>
             </Grid.Col>
@@ -443,7 +553,9 @@ export function UsersPage() {
                   />
                   <Typography.Text>{draft.disabled ? '已停用' : '已启用'}</Typography.Text>
                 </div>
-                {editingSelf ? <span className="admin-form-note">当前登录账号不能停用自身。</span> : null}
+                {editingSelf ? (
+                  <span className="admin-form-note">当前登录账号不能停用自身。</span>
+                ) : null}
               </Form.Item>
             </Grid.Col>
           </Grid.Row>

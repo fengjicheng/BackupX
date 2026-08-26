@@ -1,14 +1,54 @@
-import { Button, Card, Empty, Message, Modal, PageHeader, Select, Space, Table, Tag, Typography, Upload } from '@arco-design/web-react'
+import {
+  Button,
+  Card,
+  Empty,
+  Message,
+  Modal,
+  PageHeader,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  Upload,
+} from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BackupTaskDetailDrawer } from '../../components/backup-tasks/BackupTaskDetailDrawer'
 import { BackupTaskFormDrawer } from '../../components/backup-tasks/BackupTaskFormDrawer'
 import { TaskDependencyGraph } from '../../components/backup-tasks/TaskDependencyGraph'
-import { getBackupTaskStatusColor, getBackupTaskStatusLabel, getBackupTaskTypeLabel } from '../../components/backup-tasks/field-config'
-import { batchDeleteTasks, batchRunTasks, batchToggleTasks, createBackupTask, deleteBackupTask, exportBackupTasks, getBackupTask, importBackupTasks, listBackupTasks, runBackupTask, toggleBackupTask, updateBackupTask, type TaskImportResult } from '../../services/backup-tasks'
+import {
+  getBackupTaskStatusColor,
+  getBackupTaskStatusLabel,
+  getBackupTaskTypeLabel,
+} from '../../components/backup-tasks/field-config'
+import {
+  batchDeleteTasks,
+  batchRunTasks,
+  batchToggleTasks,
+  createBackupTask,
+  deleteBackupTask,
+  exportBackupTasks,
+  getBackupTask,
+  importBackupTasks,
+  listBackupTasks,
+  runBackupTask,
+  toggleBackupTask,
+  updateBackupTask,
+  type TaskImportResult,
+} from '../../services/backup-tasks'
 import { listNodes } from '../../services/nodes'
-import { createStorageTarget, listStorageTargets, startGoogleDriveAuth, testStorageTarget } from '../../services/storage-targets'
-import type { BackupTaskDetail, BackupTaskPayload, BackupTaskSummary } from '../../types/backup-tasks'
+import {
+  createStorageTarget,
+  listStorageTargets,
+  startGoogleDriveAuth,
+  testStorageTarget,
+} from '../../services/storage-targets'
+import type {
+  BackupTaskDetail,
+  BackupTaskPayload,
+  BackupTaskSummary,
+} from '../../types/backup-tasks'
 import type { NodeSummary } from '../../types/nodes'
 import type { StorageTargetPayload, StorageTargetSummary } from '../../types/storage-targets'
 import { useAuthStore } from '../../stores/auth'
@@ -36,14 +76,20 @@ export function BackupTasksPage() {
   const [batchLoading, setBatchLoading] = useState(false)
   const [importResults, setImportResults] = useState<TaskImportResult[] | null>(null)
 
-  const enabledStorageTargets = useMemo(() => storageTargets.filter((item) => item.enabled), [storageTargets])
+  const enabledStorageTargets = useMemo(
+    () => storageTargets.filter((item) => item.enabled),
+    [storageTargets],
+  )
 
   // 从全量任务中提取所有用过的标签，作为筛选器选项
   const availableTags = useMemo(() => {
     const set = new Set<string>()
     for (const task of tasks) {
       if (!task.tags) continue
-      for (const tag of task.tags.split(',').map((t) => t.trim()).filter(Boolean)) {
+      for (const tag of task.tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean)) {
         set.add(tag)
       }
     }
@@ -54,7 +100,10 @@ export function BackupTasksPage() {
   const filteredTasks = useMemo(() => {
     if (tagFilter.length === 0) return tasks
     return tasks.filter((task) => {
-      const taskTags = (task.tags ?? '').split(',').map((t) => t.trim()).filter(Boolean)
+      const taskTags = (task.tags ?? '')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean)
       return tagFilter.every((filter) => taskTags.includes(filter))
     })
   }, [tasks, tagFilter])
@@ -62,7 +111,11 @@ export function BackupTasksPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [taskList, targetList, nodeList] = await Promise.all([listBackupTasks(), listStorageTargets(), listNodes()])
+      const [taskList, targetList, nodeList] = await Promise.all([
+        listBackupTasks(),
+        listStorageTargets(),
+        listNodes(),
+      ])
       setTasks(taskList)
       setStorageTargets(targetList)
       setNodes(nodeList)
@@ -166,7 +219,9 @@ export function BackupTasksPage() {
   async function handleExport() {
     try {
       await exportBackupTasks(selectedIds.length > 0 ? selectedIds : undefined)
-      Message.success(selectedIds.length > 0 ? `已导出 ${selectedIds.length} 个任务` : '已导出全部任务')
+      Message.success(
+        selectedIds.length > 0 ? `已导出 ${selectedIds.length} 个任务` : '已导出全部任务',
+      )
     } catch (e) {
       Message.error(resolveErrorMessage(e, '导出失败'))
     }
@@ -181,7 +236,9 @@ export function BackupTasksPage() {
       setImportResults(results)
       const succ = results.filter((r) => r.success && !r.skipped).length
       const skipped = results.filter((r) => r.skipped).length
-      Message.success(`导入完成：创建 ${succ} / 跳过 ${skipped} / 失败 ${results.length - succ - skipped}`)
+      Message.success(
+        `导入完成：创建 ${succ} / 跳过 ${skipped} / 失败 ${results.length - succ - skipped}`,
+      )
       await loadData()
     } catch (e) {
       Message.error(resolveErrorMessage(e, '导入失败'))
@@ -190,14 +247,15 @@ export function BackupTasksPage() {
   }
 
   // 批量操作辅助
-  async function runBatch(
-    action: 'run' | 'enable' | 'disable' | 'delete',
-  ) {
+  async function runBatch(action: 'run' | 'enable' | 'disable' | 'delete') {
     if (selectedIds.length === 0) {
       Message.info('请先选择要操作的任务')
       return
     }
-    if (action === 'delete' && !window.confirm(`确定删除 ${selectedIds.length} 个任务？操作不可撤销。`)) {
+    if (
+      action === 'delete' &&
+      !window.confirm(`确定删除 ${selectedIds.length} 个任务？操作不可撤销。`)
+    ) {
       return
     }
     setBatchLoading(true)
@@ -263,9 +321,15 @@ export function BackupTasksPage() {
         <Space direction="vertical" size={2}>
           <Typography.Text bold>{record.name}</Typography.Text>
           <Space>
-            {getBackupTaskTypeLabel(record.type) && <Tag color="arcoblue" bordered>{getBackupTaskTypeLabel(record.type)}</Tag>}
+            {getBackupTaskTypeLabel(record.type) && (
+              <Tag color="arcoblue" bordered>
+                {getBackupTaskTypeLabel(record.type)}
+              </Tag>
+            )}
             {record.enabled !== undefined && (
-              <Tag color={record.enabled ? 'green' : 'gray'} bordered>{record.enabled ? '已启用' : '已停用'}</Tag>
+              <Tag color={record.enabled ? 'green' : 'gray'} bordered>
+                {record.enabled ? '已启用' : '已停用'}
+              </Tag>
             )}
           </Space>
         </Space>
@@ -280,12 +344,19 @@ export function BackupTasksPage() {
       title: '存储目标',
       dataIndex: 'storageTargetNames',
       render: (_: unknown, record: BackupTaskSummary) => {
-        const names = record.storageTargetNames?.length > 0 ? record.storageTargetNames : record.storageTargetName ? [record.storageTargetName] : []
+        const names =
+          record.storageTargetNames?.length > 0
+            ? record.storageTargetNames
+            : record.storageTargetName
+              ? [record.storageTargetName]
+              : []
         if (names.length === 0) return '-'
         return (
           <Space size={4} wrap>
             {names.map((name, i) => (
-              <Tag key={i} color="arcoblue" bordered>{name}</Tag>
+              <Tag key={i} color="arcoblue" bordered>
+                {name}
+              </Tag>
             ))}
           </Space>
         )
@@ -294,17 +365,25 @@ export function BackupTasksPage() {
     {
       title: '策略',
       dataIndex: 'retentionDays',
-      render: (_: unknown, record: BackupTaskSummary) => `${record.retentionDays} 天 / ${record.maxBackups} 份`,
+      render: (_: unknown, record: BackupTaskSummary) =>
+        `${record.retentionDays} 天 / ${record.maxBackups} 份`,
     },
     {
       title: '标签',
       dataIndex: 'tags',
       render: (value: string) => {
-        const items = (value ?? '').split(',').map((t) => t.trim()).filter(Boolean)
+        const items = (value ?? '')
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
         if (items.length === 0) return <span style={{ color: 'var(--color-text-3)' }}>-</span>
         return (
           <Space size={4} wrap>
-            {items.map((tag) => <Tag key={tag} color="gray" bordered size="small">{tag}</Tag>)}
+            {items.map((tag) => (
+              <Tag key={tag} color="gray" bordered size="small">
+                {tag}
+              </Tag>
+            ))}
           </Space>
         )
       },
@@ -315,16 +394,35 @@ export function BackupTasksPage() {
       render: (value: number, record: BackupTaskSummary) => {
         if (value <= 0) return <span style={{ color: 'var(--color-text-3)' }}>未配置</span>
         // 简单着色：仅根据是否启用验证/SLA 显示徽章（实时 SLA 违约见 Dashboard）
-        const bits = [<Tag key="rpo" color="arcoblue" bordered size="small">RPO {value}h</Tag>]
-        if (record.verifyEnabled) bits.push(<Tag key="verify" color="green" bordered size="small">定时验证</Tag>)
-        return <Space size={4} wrap>{bits}</Space>
+        const bits = [
+          <Tag key="rpo" color="arcoblue" bordered size="small">
+            RPO {value}h
+          </Tag>,
+        ]
+        if (record.verifyEnabled)
+          bits.push(
+            <Tag key="verify" color="green" bordered size="small">
+              定时验证
+            </Tag>,
+          )
+        return (
+          <Space size={4} wrap>
+            {bits}
+          </Space>
+        )
       },
     },
     {
       title: '最近状态',
       render: (value: BackupTaskSummary['lastStatus']) => {
         const label = getBackupTaskStatusLabel(value)
-        return label ? <Tag color={getBackupTaskStatusColor(value)} bordered>{label}</Tag> : <span style={{ color: 'var(--color-text-3)' }}>-</span>
+        return label ? (
+          <Tag color={getBackupTaskStatusColor(value)} bordered>
+            {label}
+          </Tag>
+        ) : (
+          <span style={{ color: 'var(--color-text-3)' }}>-</span>
+        )
       },
     },
     {
@@ -342,12 +440,22 @@ export function BackupTasksPage() {
             详情
           </Button>
           {writable && (
-            <Button size="small" type="text" onClick={() => void openEdit(record.id)} loading={submitting && editingTask?.id === record.id}>
+            <Button
+              size="small"
+              type="text"
+              onClick={() => void openEdit(record.id)}
+              loading={submitting && editingTask?.id === record.id}
+            >
               编辑
             </Button>
           )}
           {writable && (
-            <Button size="small" type="text" status="success" onClick={() => void handleRun(record)}>
+            <Button
+              size="small"
+              type="text"
+              status="success"
+              onClick={() => void handleRun(record)}
+            >
               立即执行
             </Button>
           )}
@@ -357,7 +465,12 @@ export function BackupTasksPage() {
             </Button>
           )}
           {writable && (
-            <Button size="small" type="text" status="danger" onClick={() => void handleDelete(record)}>
+            <Button
+              size="small"
+              type="text"
+              status="danger"
+              onClick={() => void handleDelete(record)}
+            >
               删除
             </Button>
           )}
@@ -402,7 +515,11 @@ export function BackupTasksPage() {
         }
       />
 
-      {error ? <Card><Typography.Text type="error">{error}</Typography.Text></Card> : null}
+      {error ? (
+        <Card>
+          <Typography.Text type="error">{error}</Typography.Text>
+        </Card>
+      ) : null}
       {enabledStorageTargets.length === 0 ? (
         <Card>
           <Empty description="请先启用至少一个存储目标，再创建备份任务。" />
@@ -414,7 +531,9 @@ export function BackupTasksPage() {
       {availableTags.length > 0 && (
         <Card size="small">
           <Space wrap>
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>按标签筛选:</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              按标签筛选:
+            </Typography.Text>
             <Select
               mode="multiple"
               placeholder="选择标签进行过滤（多标签取交集）"
@@ -440,11 +559,31 @@ export function BackupTasksPage() {
         <Card size="small" style={{ backgroundColor: 'var(--color-fill-2)' }}>
           <Space wrap>
             <Typography.Text bold>已选 {selectedIds.length} 个任务：</Typography.Text>
-            <Button size="small" type="primary" loading={batchLoading} onClick={() => void runBatch('run')}>批量执行</Button>
-            <Button size="small" loading={batchLoading} onClick={() => void runBatch('enable')}>批量启用</Button>
-            <Button size="small" loading={batchLoading} onClick={() => void runBatch('disable')}>批量停用</Button>
-            <Button size="small" status="danger" loading={batchLoading} onClick={() => void runBatch('delete')}>批量删除</Button>
-            <Button size="small" type="text" onClick={() => setSelectedIds([])}>取消</Button>
+            <Button
+              size="small"
+              type="primary"
+              loading={batchLoading}
+              onClick={() => void runBatch('run')}
+            >
+              批量执行
+            </Button>
+            <Button size="small" loading={batchLoading} onClick={() => void runBatch('enable')}>
+              批量启用
+            </Button>
+            <Button size="small" loading={batchLoading} onClick={() => void runBatch('disable')}>
+              批量停用
+            </Button>
+            <Button
+              size="small"
+              status="danger"
+              loading={batchLoading}
+              onClick={() => void runBatch('delete')}
+            >
+              批量删除
+            </Button>
+            <Button size="small" type="text" onClick={() => setSelectedIds([])}>
+              取消
+            </Button>
           </Space>
         </Card>
       )}
@@ -457,12 +596,22 @@ export function BackupTasksPage() {
           data={filteredTasks}
           pagination={{ pageSize: 10 }}
           stripe
-          noDataElement={<Empty description={tagFilter.length > 0 ? "当前筛选下无任务" : "暂无备份任务，请先点击右上角创建任务"} />}
-          rowSelection={writable ? {
-            type: 'checkbox',
-            selectedRowKeys: selectedIds,
-            onChange: (keys) => setSelectedIds(keys.map((k) => Number(k))),
-          } : undefined}
+          noDataElement={
+            <Empty
+              description={
+                tagFilter.length > 0 ? '当前筛选下无任务' : '暂无备份任务，请先点击右上角创建任务'
+              }
+            />
+          }
+          rowSelection={
+            writable
+              ? {
+                  type: 'checkbox',
+                  selectedRowKeys: selectedIds,
+                  onChange: (keys) => setSelectedIds(keys.map((k) => Number(k))),
+                }
+              : undefined
+          }
         />
       </Card>
 
@@ -509,12 +658,24 @@ export function BackupTasksPage() {
             size="small"
             columns={[
               { title: '任务名', dataIndex: 'name' },
-              { title: '状态', render: (_: unknown, r: TaskImportResult) => (
-                r.skipped ? <Tag color="gray" bordered>跳过</Tag>
-                : r.success ? <Tag color="green" bordered>创建</Tag>
-                : <Tag color="red" bordered>失败</Tag>
-              )},
-              { title: 'ID', dataIndex: 'taskId', render: (v?: number) => v ? `#${v}` : '-' },
+              {
+                title: '状态',
+                render: (_: unknown, r: TaskImportResult) =>
+                  r.skipped ? (
+                    <Tag color="gray" bordered>
+                      跳过
+                    </Tag>
+                  ) : r.success ? (
+                    <Tag color="green" bordered>
+                      创建
+                    </Tag>
+                  ) : (
+                    <Tag color="red" bordered>
+                      失败
+                    </Tag>
+                  ),
+              },
+              { title: 'ID', dataIndex: 'taskId', render: (v?: number) => (v ? `#${v}` : '-') },
               { title: '说明', dataIndex: 'error', render: (v?: string) => v || '-' },
             ]}
           />

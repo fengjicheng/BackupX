@@ -1,5 +1,9 @@
 import { http, type ApiEnvelope, unwrapApiEnvelope } from './http'
-import type { NotificationDetail, NotificationPayload, NotificationSummary } from '../types/notifications'
+import type {
+  NotificationDetail,
+  NotificationPayload,
+  NotificationSummary,
+} from '../types/notifications'
 
 export async function listNotifications() {
   const response = await http.get<ApiEnvelope<NotificationSummary[]>>('/notifications')
@@ -27,11 +31,19 @@ export async function deleteNotification(id: number) {
 }
 
 export async function testNotification(payload: NotificationPayload) {
-  const response = await http.post<ApiEnvelope<{ success: boolean }>>('/notifications/test', payload, { timeout: 30000 })
+  const response = await http.post<ApiEnvelope<{ success: boolean }>>(
+    '/notifications/test',
+    payload,
+    { timeout: 30000 },
+  )
   return unwrapApiEnvelope(response.data)
 }
 
 export async function testSavedNotification(id: number) {
-  const response = await http.post<ApiEnvelope<{ success: boolean }>>(`/notifications/${id}/test`, undefined, { timeout: 30000 })
+  const response = await http.post<ApiEnvelope<{ success: boolean }>>(
+    `/notifications/${id}/test`,
+    undefined,
+    { timeout: 30000 },
+  )
   return unwrapApiEnvelope(response.data)
 }

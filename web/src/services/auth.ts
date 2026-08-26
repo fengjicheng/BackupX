@@ -45,22 +45,34 @@ export function clearTrustedDeviceToken(_username?: string) {
 }
 
 export async function fetchSetupStatus() {
-  const response = await http.get<{ code: string; message: string; data: { initialized: boolean } }>('/auth/setup/status')
+  const response = await http.get<{
+    code: string
+    message: string
+    data: { initialized: boolean }
+  }>('/auth/setup/status')
   return response.data.data
 }
 
 export async function setup(payload: SetupPayload) {
-  const response = await http.post<{ code: string; message: string; data: AuthResult }>('/auth/setup', payload)
+  const response = await http.post<{ code: string; message: string; data: AuthResult }>(
+    '/auth/setup',
+    payload,
+  )
   return response.data.data
 }
 
 export async function login(payload: LoginPayload) {
-  const response = await http.post<{ code: string; message: string; data: AuthResult }>('/auth/login', payload)
+  const response = await http.post<{ code: string; message: string; data: AuthResult }>(
+    '/auth/login',
+    payload,
+  )
   return response.data.data
 }
 
 export async function fetchProfile() {
-  const response = await http.get<{ code: string; message: string; data: UserInfo }>('/auth/profile')
+  const response = await http.get<{ code: string; message: string; data: UserInfo }>(
+    '/auth/profile',
+  )
   return response.data.data
 }
 
@@ -70,7 +82,10 @@ export interface ChangePasswordPayload {
 }
 
 export async function changePassword(payload: ChangePasswordPayload) {
-  const response = await http.put<{ code: string; message: string; data: { changed: boolean } }>('/auth/password', payload)
+  const response = await http.put<{ code: string; message: string; data: { changed: boolean } }>(
+    '/auth/password',
+    payload,
+  )
   return response.data.data
 }
 
@@ -181,71 +196,114 @@ export interface TrustedDevice {
 }
 
 export async function prepareTwoFactor(payload: TwoFactorSetupPayload) {
-  const response = await http.post<{ code: string; message: string; data: TwoFactorSetupResult }>('/auth/2fa/setup', payload)
+  const response = await http.post<{ code: string; message: string; data: TwoFactorSetupResult }>(
+    '/auth/2fa/setup',
+    payload,
+  )
   return response.data.data
 }
 
 export async function enableTwoFactor(payload: EnableTwoFactorPayload) {
-  const response = await http.post<{ code: string; message: string; data: TwoFactorCodesResult }>('/auth/2fa/enable', payload)
+  const response = await http.post<{ code: string; message: string; data: TwoFactorCodesResult }>(
+    '/auth/2fa/enable',
+    payload,
+  )
   return response.data.data
 }
 
 export async function regenerateRecoveryCodes(payload: RegenerateRecoveryCodesPayload) {
-  const response = await http.post<{ code: string; message: string; data: TwoFactorCodesResult }>('/auth/2fa/recovery-codes', payload)
+  const response = await http.post<{ code: string; message: string; data: TwoFactorCodesResult }>(
+    '/auth/2fa/recovery-codes',
+    payload,
+  )
   return response.data.data
 }
 
 export async function disableTwoFactor(payload: DisableTwoFactorPayload) {
-  const response = await http.delete<{ code: string; message: string; data: UserInfo }>('/auth/2fa', { data: payload })
+  const response = await http.delete<{ code: string; message: string; data: UserInfo }>(
+    '/auth/2fa',
+    { data: payload },
+  )
   return response.data.data
 }
 
 export async function configureOtp(payload: OTPConfigPayload) {
-  const response = await http.put<{ code: string; message: string; data: UserInfo }>('/auth/otp/config', payload)
+  const response = await http.put<{ code: string; message: string; data: UserInfo }>(
+    '/auth/otp/config',
+    payload,
+  )
   return response.data.data
 }
 
 export async function sendLoginOtp(payload: SendLoginOTPPayload) {
-  const response = await http.post<{ code: string; message: string; data: { sent: boolean } }>('/auth/otp/send', payload)
+  const response = await http.post<{ code: string; message: string; data: { sent: boolean } }>(
+    '/auth/otp/send',
+    payload,
+  )
   return response.data.data
 }
 
 export async function beginWebAuthnRegistration(payload: { currentPassword: string }) {
-  const response = await http.post<{ code: string; message: string; data: WebAuthnRegistrationOptions }>('/auth/webauthn/register/options', payload)
+  const response = await http.post<{
+    code: string
+    message: string
+    data: WebAuthnRegistrationOptions
+  }>('/auth/webauthn/register/options', payload)
   return response.data.data
 }
 
-export async function finishWebAuthnRegistration(payload: { name?: string; credential: WebAuthnAttestation }) {
-  const response = await http.post<{ code: string; message: string; data: UserInfo }>('/auth/webauthn/register/finish', payload)
+export async function finishWebAuthnRegistration(payload: {
+  name?: string
+  credential: WebAuthnAttestation
+}) {
+  const response = await http.post<{ code: string; message: string; data: UserInfo }>(
+    '/auth/webauthn/register/finish',
+    payload,
+  )
   return response.data.data
 }
 
 export async function beginWebAuthnLogin(payload: { username: string; password: string }) {
-  const response = await http.post<{ code: string; message: string; data: WebAuthnLoginOptions }>('/auth/webauthn/login/options', payload)
+  const response = await http.post<{ code: string; message: string; data: WebAuthnLoginOptions }>(
+    '/auth/webauthn/login/options',
+    payload,
+  )
   return response.data.data
 }
 
 export async function listWebAuthnCredentials() {
-  const response = await http.get<{ code: string; message: string; data: WebAuthnCredential[] }>('/auth/webauthn/credentials')
+  const response = await http.get<{ code: string; message: string; data: WebAuthnCredential[] }>(
+    '/auth/webauthn/credentials',
+  )
   return response.data.data
 }
 
 export async function deleteWebAuthnCredential(id: string, payload: { currentPassword: string }) {
-  const response = await http.delete<{ code: string; message: string; data: UserInfo }>(`/auth/webauthn/credentials/${id}`, { data: payload })
+  const response = await http.delete<{ code: string; message: string; data: UserInfo }>(
+    `/auth/webauthn/credentials/${id}`,
+    { data: payload },
+  )
   return response.data.data
 }
 
 export async function listTrustedDevices() {
-  const response = await http.get<{ code: string; message: string; data: TrustedDevice[] }>('/auth/trusted-devices')
+  const response = await http.get<{ code: string; message: string; data: TrustedDevice[] }>(
+    '/auth/trusted-devices',
+  )
   return response.data.data
 }
 
 export async function revokeTrustedDevice(id: string, payload: { currentPassword: string }) {
-  const response = await http.delete<{ code: string; message: string; data: { deleted: boolean } }>(`/auth/trusted-devices/${id}`, { data: payload })
+  const response = await http.delete<{ code: string; message: string; data: { deleted: boolean } }>(
+    `/auth/trusted-devices/${id}`,
+    { data: payload },
+  )
   return response.data.data
 }
 
 export async function logout() {
-  const response = await http.post<{ code: string; message: string; data: { loggedOut: boolean } }>('/auth/logout')
+  const response = await http.post<{ code: string; message: string; data: { loggedOut: boolean } }>(
+    '/auth/logout',
+  )
   return response.data.data
 }

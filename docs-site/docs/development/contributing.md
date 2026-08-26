@@ -25,17 +25,17 @@ For significant features or refactors, open an issue first to align on scope bef
 ## Pull requests
 
 1. Fork and create a topic branch (e.g. `fix/windows-path-escape`)
-2. Run `make test` and make sure everything passes
+2. Run `make verify` and make sure formatting, tests, builds, and documentation checks pass
 3. Keep changes focused — one concern per PR
-4. Write commit messages in Chinese following `类型: 简要描述` — examples:
-   - `功能: 新增审计日志模块`
-   - `修复: 目录浏览器无法进入子目录`
-   - `重构: 简化存储目标解密逻辑`
-   - Types: `功能` / `修复` / `重构` / `文档` / `构建` / `测试`
+4. Write Conventional Commits with a Chinese subject — examples:
+   - `feat(audit): 新增审计日志模块`
+   - `fix(browser): 修复目录浏览器无法进入子目录`
+   - `refactor(storage): 简化存储目标解密逻辑`
+   - Types: `feat` / `fix` / `docs` / `style` / `refactor` / `perf` / `test` / `chore`
 5. PR title and body in Chinese too. Describe the why and how, not just the what.
 
 ## Coding guidelines
 
 - **Go** — handle every error (no `_ = err`); use the existing logger (`zap`); no `fmt.Println` in production paths
-- **TypeScript** — strict mode, no implicit any, follow existing ESLint/Prettier configs
+- **TypeScript** — strict mode, no implicit any, and pass the repository ESLint and Prettier checks
 - **Commit scope** — one logical change per commit; don't mix drive-by cleanups with feature work

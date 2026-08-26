@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -70,8 +69,10 @@ func (r *MySQLRunner) Run(ctx context.Context, task TaskSpec, writer LogWriter) 
 
 	stderrWriter := newLogLineWriter(writer, "mysqldump")
 	writer.WriteLine("开始执行 mysqldump")
-	if err := r.executor.Run(ctx, "mysqldump", args, CommandOptions{Stdout: file, Stderr: stderrWriter, Env: mysqlEnv(task.Database.Password)}); err != nil {
-		return nil, fmt.Errorf("run mysqldump: %w: %s", err, stderrWriter.collected())
+	runErr := r.executor.Run(ctx, "mysqldump", args, CommandOptions{Stdout: file, Stderr: stderrWriter, Env: mysqlEnv(task.Database.Password)})
+	stderrWriter.Flush()
+	if runErr != nil {
+		return nil, fmt.Errorf("run mysqldump: %w: %s", runErr, stderrWriter.collected())
 	}
 	info, err := file.Stat()
 	if err != nil {
@@ -109,9 +110,10 @@ func mysqlEnv(password string) []string {
 
 // logLineWriter streams each line of output to a LogWriter in real-time.
 type logLineWriter struct {
-	writer LogWriter
-	prefix string
-	buf    bytes.Buffer
+	writer  LogWriter
+	prefix  string
+	pending []byte
+	output  []byte
 }
 
 func newLogLineWriter(w LogWriter, prefix string) *logLineWriter {
@@ -119,28 +121,43 @@ func newLogLineWriter(w LogWriter, prefix string) *logLineWriter {
 }
 
 func (w *logLineWriter) Write(p []byte) (int, error) {
-	n := len(p)
-	w.buf.Write(p)
-	scanner := bufio.NewScanner(strings.NewReader(w.buf.String()))
-	var remaining string
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			w.writer.WriteLine(fmt.Sprintf("[%s] %s", w.prefix, line))
+	w.output = append(w.output, p...)
+	w.pending = append(w.pending, p...)
+	consumed := 0
+	for {
+		newline := bytes.IndexByte(w.pending[consumed:], '\n')
+		if newline < 0 {
+			break
 		}
+		end := consumed + newline
+		w.emit(w.pending[consumed:end])
+		consumed = end + 1
 	}
-	// Keep any partial last line (no newline yet)
-	lastNl := bytes.LastIndexByte(p, '\n')
-	if lastNl >= 0 {
-		remaining = w.buf.String()[w.buf.Len()-(len(p)-lastNl-1):]
-		w.buf.Reset()
-		w.buf.WriteString(remaining)
+	if consumed > 0 {
+		copy(w.pending, w.pending[consumed:])
+		w.pending = w.pending[:len(w.pending)-consumed]
 	}
-	return n, nil
+	return len(p), nil
+}
+
+// Flush emits the final unterminated line. It is safe to call more than once.
+func (w *logLineWriter) Flush() {
+	if len(w.pending) == 0 {
+		return
+	}
+	w.emit(w.pending)
+	w.pending = w.pending[:0]
+}
+
+func (w *logLineWriter) emit(raw []byte) {
+	line := strings.TrimSpace(string(raw))
+	if line != "" {
+		w.writer.WriteLine(fmt.Sprintf("[%s] %s", w.prefix, line))
+	}
 }
 
 func (w *logLineWriter) collected() string {
-	return strings.TrimSpace(w.buf.String())
+	return strings.TrimSpace(string(w.output))
 }
 
 func formatFileSize(size int64) string {

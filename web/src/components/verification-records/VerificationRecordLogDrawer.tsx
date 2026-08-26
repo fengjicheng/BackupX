@@ -1,8 +1,14 @@
 import { Alert, Descriptions, Drawer, Space, Spin, Tag, Typography } from '@arco-design/web-react'
 import { useEffect, useMemo, useState } from 'react'
-import { getVerificationRecord, streamVerificationRecordLogs } from '../../services/verification-records'
+import {
+  getVerificationRecord,
+  streamVerificationRecordLogs,
+} from '../../services/verification-records'
 import type { BackupLogEvent } from '../../types/backup-records'
-import type { VerificationRecordDetail, VerificationRecordStatus } from '../../types/verification-records'
+import type {
+  VerificationRecordDetail,
+  VerificationRecordStatus,
+} from '../../types/verification-records'
 import { resolveErrorMessage } from '../../utils/error'
 import { formatDateTime, formatDuration } from '../../utils/format'
 
@@ -69,9 +75,17 @@ export function VerificationRecordLogDrawer({ visible, verifyId, onCancel }: Pro
           unsubscribe = streamVerificationRecordLogs(current, {
             onEvent: (event) => {
               if (!active) return
-              setEvents((existing) => (existing.some((i) => i.sequence === event.sequence) ? existing : [...existing, event]))
+              setEvents((existing) =>
+                existing.some((i) => i.sequence === event.sequence)
+                  ? existing
+                  : [...existing, event],
+              )
               if (event.completed) {
-                setRecord((existing) => (existing ? { ...existing, status: event.status as VerificationRecordStatus } : existing))
+                setRecord((existing) =>
+                  existing
+                    ? { ...existing, status: event.status as VerificationRecordStatus }
+                    : existing,
+                )
               }
             },
             onDone: () => {
@@ -123,7 +137,9 @@ export function VerificationRecordLogDrawer({ visible, verifyId, onCancel }: Pro
               {record.taskName}
             </Typography.Title>
             <Space>
-              <Tag color={statusColor(record.status)} bordered>{statusLabel(record.status)}</Tag>
+              <Tag color={statusColor(record.status)} bordered>
+                {statusLabel(record.status)}
+              </Tag>
               <Tag bordered>{record.mode === 'deep' ? '深度模式' : '快速模式'}</Tag>
               {record.triggeredBy && <Tag bordered>触发: {record.triggeredBy}</Tag>}
             </Space>
@@ -131,7 +147,10 @@ export function VerificationRecordLogDrawer({ visible, verifyId, onCancel }: Pro
           <Descriptions
             column={1}
             data={[
-              { label: '源备份', value: `#${record.backupRecordId}${record.backupFileName ? ` (${record.backupFileName})` : ''}` },
+              {
+                label: '源备份',
+                value: `#${record.backupRecordId}${record.backupFileName ? ` (${record.backupFileName})` : ''}`,
+              },
               { label: '验证摘要', value: record.summary || '-' },
               { label: '开始时间', value: formatDateTime(record.startedAt) },
               { label: '完成时间', value: formatDateTime(record.completedAt) },

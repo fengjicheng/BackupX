@@ -18,12 +18,17 @@ import (
 
 // InstallTokenService 负责一次性安装令牌的创建/消费/校验。
 type InstallTokenService struct {
-	repo     repository.AgentInstallTokenRepository
-	nodeRepo repository.NodeRepository
+	repo       repository.AgentInstallTokenRepository
+	nodeRepo   repository.NodeRepository
+	background BackgroundRunner
 }
 
 func NewInstallTokenService(repo repository.AgentInstallTokenRepository, nodeRepo repository.NodeRepository) *InstallTokenService {
 	return &InstallTokenService{repo: repo, nodeRepo: nodeRepo}
+}
+
+func (s *InstallTokenService) SetBackgroundRunner(runner BackgroundRunner) {
+	s.background = runner
 }
 
 // InstallTokenInput 生成一次性安装令牌的输入。
@@ -247,18 +252,18 @@ func (s *InstallTokenService) StartGC(ctx context.Context, interval time.Duratio
 	if interval <= 0 {
 		interval = time.Hour
 	}
-	go func() {
+	startBackgroundMonitor(s.background, ctx, func(runCtx context.Context) {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				_, _ = s.repo.DeleteExpiredBefore(ctx, time.Now().UTC().Add(-7*24*time.Hour))
+				_, _ = s.repo.DeleteExpiredBefore(runCtx, time.Now().UTC().Add(-7*24*time.Hour))
 			}
 		}
-	}()
+	})
 }
 
 func (s *InstallTokenService) validate(in InstallTokenInput) error {

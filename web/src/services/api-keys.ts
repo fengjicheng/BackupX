@@ -35,7 +35,9 @@ export async function createApiKey(payload: ApiKeyCreateInput) {
 }
 
 export async function toggleApiKey(id: number, disabled: boolean) {
-  const response = await http.put<ApiEnvelope<{ disabled: boolean }>>(`/api-keys/${id}/toggle`, { disabled })
+  const response = await http.put<ApiEnvelope<{ disabled: boolean }>>(`/api-keys/${id}/toggle`, {
+    disabled,
+  })
   return unwrapApiEnvelope(response.data)
 }
 
